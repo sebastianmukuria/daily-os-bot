@@ -49,6 +49,22 @@ sending (`sendMessage`) and polling (`getUpdates`) are independent operations.
 > only *send*, so they coexist fine with this bot — but don't run two copies of this
 > bot at once.
 
+### The proactive briefings
+
+The outbound layer runs as scheduled tasks in [Claude](https://claude.ai). Each fires
+on a cron schedule, does its work through MCP connectors (Notion, Google Calendar,
+Gmail), and sends the result to Telegram via the Bot API.
+
+| Task | Schedule (ET) | What it does |
+|------|---------------|--------------|
+| **Morning Briefing** | 7:30am | Reads all incomplete tasks, sorts by energy (High → Medium → Low), flags tasks untouched for 3+ days as stale (and marks them in Notion), pulls the day's calendar events, and sends a structured daily plan. |
+| **Midday Check** | 12:30pm | Pulls remaining tasks and afternoon calendar events; sends a short progress nudge — how many done, what's still open. |
+| **EOD Wrap** | 6:00pm | Summarizes what got done vs. what's rolling to tomorrow, pulls tomorrow's calendar, and calls out anything that's been stale for multiple days. |
+| **Gmail → Calendar Sync** | 8:00am & 6:00pm | Searches Gmail for real-world events (flights, hotels, reservations, tickets, invites) and creates calendar events for any with a clear date/time that aren't already there. Only messages you if it actually added something. |
+
+These follow the same ADHD-friendly design rules as the bot: energy-ordered tasks,
+stale-task flagging, and a few fixed check-in windows instead of random notifications.
+
 ## Tech stack
 
 - **Python** with [`python-telegram-bot`](https://python-telegram-bot.org/) (async polling)
