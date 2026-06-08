@@ -4,6 +4,9 @@ credentials.json
 token.json
 token.pickle
 
+# Personal data
+seed_data.yaml
+
 # Python
 __pycache__/
 *.py[cod]
