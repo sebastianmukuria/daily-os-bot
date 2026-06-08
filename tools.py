@@ -252,6 +252,38 @@ TOOLS = [
             "required": ["summary", "start_datetime"],
         },
     },
+    {
+        "name": "update_calendar_event",
+        "description": (
+            "Edit an EXISTING Google Calendar event instead of creating a new one. "
+            "Use this when Sebastian wants to change a detail of an event that already "
+            "exists — e.g. add/change the location, move the time, rename it. Only the "
+            "fields you pass are changed; leave the rest out. You need the event's id: "
+            "use the id returned when you created it, or call get_calendar_events to find it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string", "description": "The id of the event to edit"},
+                "summary": {"type": "string", "description": "New title (optional)"},
+                "start_datetime": {
+                    "type": "string",
+                    "description": "New start (optional). ISO datetime or 'YYYY-MM-DD' if all_day.",
+                },
+                "end_datetime": {
+                    "type": "string",
+                    "description": "New end (optional). Same format as start.",
+                },
+                "all_day": {
+                    "type": "boolean",
+                    "description": "Set true if the new start/end are all-day dates. Default: false",
+                },
+                "location": {"type": "string", "description": "New location (optional)"},
+                "description": {"type": "string", "description": "New notes (optional)"},
+            },
+            "required": ["event_id"],
+        },
+    },
 ]
 
 
@@ -312,6 +344,17 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
             _create_calendar_event,
             summary=inputs["summary"],
             start_datetime=inputs["start_datetime"],
+            end_datetime=inputs.get("end_datetime"),
+            all_day=inputs.get("all_day", False),
+            location=inputs.get("location"),
+            description=inputs.get("description"),
+        )
+    elif name == "update_calendar_event":
+        return await asyncio.to_thread(
+            _update_calendar_event,
+            event_id=inputs["event_id"],
+            summary=inputs.get("summary"),
+            start_datetime=inputs.get("start_datetime"),
             end_datetime=inputs.get("end_datetime"),
             all_day=inputs.get("all_day", False),
             location=inputs.get("location"),
@@ -516,8 +559,48 @@ def _create_calendar_event(
     event = service.events().insert(calendarId="primary", body=body).execute()
     return {
         "success": True,
+        "id": event.get("id"),  # needed to edit this event later
         "summary": summary,
         "start": start_datetime,
+        "link": event.get("htmlLink"),
+    }
+
+
+def _update_calendar_event(
+    event_id: str,
+    summary: str = None,
+    start_datetime: str = None,
+    end_datetime: str = None,
+    all_day: bool = False,
+    location: str = None,
+    description: str = None,
+) -> dict:
+    """Patch an existing event — only the fields provided are changed."""
+    service = _get_calendar_service()
+
+    body: dict = {}
+    if summary is not None:
+        body["summary"] = summary
+    if location is not None:
+        body["location"] = location
+    if description is not None:
+        body["description"] = description
+    if start_datetime:
+        body["start"] = (
+            {"date": start_datetime} if all_day
+            else {"dateTime": start_datetime, "timeZone": ET}
+        )
+    if end_datetime:
+        body["end"] = (
+            {"date": end_datetime} if all_day
+            else {"dateTime": end_datetime, "timeZone": ET}
+        )
+
+    event = service.events().patch(calendarId="primary", eventId=event_id, body=body).execute()
+    return {
+        "success": True,
+        "id": event.get("id"),
+        "summary": event.get("summary"),
         "link": event.get("htmlLink"),
     }
 
@@ -544,6 +627,7 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
     for event in events_result.get("items", []):
         start = event["start"].get("dateTime", event["start"].get("date", ""))
         events.append({
+            "id": event["id"],  # use this to edit the event via update_calendar_event
             "summary": event.get("summary", "(no title)"),
             "start": start,
             "location": event.get("location", ""),
