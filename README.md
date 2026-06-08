@@ -31,6 +31,24 @@ message to Claude along with a set of tools; if Claude decides to call a tool (e
 `create_task`), the bot runs it, feeds the result back, and repeats until Claude has a
 final answer. `tools.py` defines those tools and talks to Notion and Google Calendar.
 
+## The bigger picture: two halves of a Daily OS
+
+This repo is the **reactive** half of a larger personal operating system. The full
+setup pairs two complementary pieces that share the same Telegram bot:
+
+| Layer | Direction | What it does | Where it lives |
+|-------|-----------|--------------|----------------|
+| **This bot** | Inbound (you → bot) | Polls Telegram for your messages and responds, calling Notion / Calendar tools | This repo |
+| **Proactive briefings** | Outbound (bot → you) | Sends scheduled check-ins on a timer — a morning briefing, midday check, end-of-day wrap, and inbox scans | [Claude](https://claude.ai) scheduled tasks, configured separately |
+
+The proactive layer *pushes* messages to your Telegram chat on a schedule, while this
+bot *listens* for your replies. They use the same bot token but never collide:
+sending (`sendMessage`) and polling (`getUpdates`) are independent operations.
+
+> ⚠️ Only one process may **poll** a given bot token at a time. The scheduled tasks
+> only *send*, so they coexist fine with this bot — but don't run two copies of this
+> bot at once.
+
 ## Tech stack
 
 - **Python** with [`python-telegram-bot`](https://python-telegram-bot.org/) (async polling)
