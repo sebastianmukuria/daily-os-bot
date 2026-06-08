@@ -68,7 +68,7 @@ stale-task flagging, and a few fixed check-in windows instead of random notifica
 ## Tech stack
 
 - **Python** with [`python-telegram-bot`](https://python-telegram-bot.org/) (async polling)
-- [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) SDK — model: `claude-haiku-4-5`
+- [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) SDK — model: `claude-haiku-4-5` by default (override with the `CLAUDE_MODEL` env var, e.g. `claude-sonnet-4-6`)
 - [`notion-client`](https://github.com/ramnes/notion-sdk-py) for Notion (2025-09-03 data-source API)
 - `google-api-python-client` for Google Calendar
 

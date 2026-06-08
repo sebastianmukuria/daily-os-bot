@@ -31,6 +31,9 @@ ALLOWED_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "5384689298"))
 
 MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096
+# Switch models without code changes: set CLAUDE_MODEL in the environment.
+# Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -201,7 +204,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Agentic tool loop, capped so it can't run away on tokens.
         for _ in range(MAX_TOOL_ITERATIONS):
             response = client.messages.create(
-                model="claude-haiku-4-5",
+                model=CLAUDE_MODEL,
                 max_tokens=1024,
                 system=system,
                 tools=TOOLS + [WEB_SEARCH_TOOL],
@@ -294,7 +297,7 @@ def main() -> None:
     app.add_handler(CommandHandler("clear", handle_clear))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(on_error)
-    logger.info("Daily OS bot polling... Ctrl+C to stop.")
+    logger.info("Daily OS bot polling on model %s... Ctrl+C to stop.", CLAUDE_MODEL)
     app.run_polling(drop_pending_updates=True)
 
 
