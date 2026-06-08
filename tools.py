@@ -328,6 +328,10 @@ TOOLS = [
     },
 ]
 
+# Server-side tool: Anthropic's API runs the search itself and returns the results
+# inline, so there's nothing for us to execute — we just declare it alongside TOOLS.
+WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search", "max_uses": 5}
+
 
 async def execute_tool(name: str, inputs: dict) -> Any:
     logger.info("tool call -> %s %s", name, inputs)

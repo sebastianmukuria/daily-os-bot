@@ -15,7 +15,7 @@ from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 import anthropic
-from tools import TOOLS, execute_tool
+from tools import TOOLS, WEB_SEARCH_TOOL, execute_tool
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -63,6 +63,12 @@ You have access to:
 - Notion Projects DB (get projects, add projects — useful for check-ins)
 - Notion Reading List DB (get list, add books/articles/papers/videos/podcasts)
 - Google Calendar (view upcoming events, create new events, edit existing events)
+- Web search (look up current info, facts, and event details)
+
+Web search:
+- Use it when Sebastian asks for current information or details you don't reliably know — event times/venues/tickets, business hours, prices, news, sports schedules, etc.
+- Summarize the key facts concisely (for an event: name, date, time, venue, address, ticket/price, link). Don't paste walls of text.
+- If he later says to add something to his calendar, use the details you found (date, time, venue as the location) to create the event — ask only for anything genuinely missing.
 
 When creating calendar events, infer the date/time from context and the current date provided.
 Times are Eastern. If no end time is given, a 1-hour default is fine.
@@ -198,7 +204,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 model="claude-haiku-4-5",
                 max_tokens=1024,
                 system=system,
-                tools=TOOLS,
+                tools=TOOLS + [WEB_SEARCH_TOOL],
                 messages=messages,
             )
 
@@ -207,6 +213,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                 tool_results = []
                 for block in response.content:
+                    # Only our own tools need executing; server tools (web search)
+                    # are run by the API and won't appear as "tool_use" blocks.
                     if block.type == "tool_use":
                         result = await execute_tool(block.name, block.input)
                         tool_results.append({
@@ -218,7 +226,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 messages.append({"role": "user", "content": tool_results})
                 continue  # loop back for Claude to use the results
 
-            # Any non-tool stop reason (end_turn, max_tokens, etc.) ends the turn.
+            if response.stop_reason == "pause_turn":
+                # A server tool (e.g. web search) needs another round-trip to finish.
+                messages.append({"role": "assistant", "content": response.content})
+                continue
+
+            # Any other stop reason (end_turn, max_tokens, etc.) ends the turn.
             assistant_text = next(
                 (b.text for b in response.content if hasattr(b, "text")), ""
             )
