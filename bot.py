@@ -68,6 +68,9 @@ You have access to:
 - Google Calendar (view upcoming events, create new events, edit existing events)
 - Web search (look up current info, facts, and event details)
 
+Replied-to context:
+- A message may begin with quoted "[Context — Sebastian is replying to this earlier message…]". That quoted block is an earlier message (often an automated briefing or events digest) he's responding to. Use it to resolve references like "the second one", "that event", or "add it" — pull the relevant details out of the quoted text and act on them.
+
 Web search:
 - Use it when Sebastian asks for current information or details you don't reliably know — event times/venues/tickets, business hours, prices, news, sports schedules, etc.
 - Summarize the key facts concisely (for an event: name, date, time, venue, address, ticket/price, link). Don't paste walls of text.
@@ -181,12 +184,29 @@ def _trim_history(messages: list, max_messages: int = 20) -> list:
     return trimmed
 
 
+def _build_user_content(text: str, replied_text: str | None) -> str:
+    """If Sebastian is replying to an earlier message (e.g. a cowork digest the
+    bot can't otherwise see), quote it so Claude has the context to act on it."""
+    if replied_text:
+        return (
+            "[Context — Sebastian is replying to this earlier message "
+            "(it may be an automated briefing/digest):\n"
+            f'"""\n{replied_text}\n"""\n]\n\n{text}'
+        )
+    return text
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat.id != ALLOWED_CHAT_ID:
         return
 
     chat_id = update.effective_chat.id
-    user_text = update.message.text
+
+    # If this is a reply to another message, pull that message's text in as context
+    # (this is the only way the bot can "see" a message it/cowork sent earlier).
+    replied = update.message.reply_to_message
+    replied_text = (getattr(replied, "text", None) or getattr(replied, "caption", None)) if replied else None
+    user_content = _build_user_content(update.message.text, replied_text)
 
     await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
 
@@ -196,7 +216,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     now_str = datetime.now(et).strftime("%A, %B %d, %Y %I:%M %p ET")
     system = f"{SYSTEM_PROMPT}\n\nCurrent date/time: {now_str}"
 
-    messages = base_history + [{"role": "user", "content": user_text}]
+    messages = base_history + [{"role": "user", "content": user_content}]
 
     assistant_text = ""
 
