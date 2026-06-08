@@ -24,8 +24,14 @@ READING_DS_ID = "29aba34c-4a58-4096-8c7f-f649976e7639"
 
 # Real select option names in the Notion DBs (with emoji prefixes)
 ENERGY_MAP = {"High": "⚡ High", "Medium": "🔋 Medium", "Low": "🪫 Low"}
-STATUS_NOT_STARTED = "🔴 Not Started"
-STATUS_DONE = "🟢 Done"
+STATUS_MAP = {
+    "Not Started": "🔴 Not Started",
+    "In Progress": "🟡 In Progress",
+    "Done": "🟢 Done",
+    "Blocked": "⚫ Blocked",
+}
+STATUS_NOT_STARTED = STATUS_MAP["Not Started"]
+STATUS_DONE = STATUS_MAP["Done"]
 PROJECT_STATUS_MAP = {
     "Active": "🟢 Active", "Paused": "⏸️ Paused", "Done": "✅ Done", "Idea": "💡 Idea",
 }
@@ -122,6 +128,42 @@ TOOLS = [
                     "type": "string",
                     "description": "Name or partial name of the task to complete",
                 },
+            },
+            "required": ["task_name"],
+        },
+    },
+    {
+        "name": "update_task",
+        "description": (
+            "Edit an EXISTING task in Sebastian's Notion Tasks database — change its "
+            "energy, due date, status, name, or notes. Finds the task by name (partial "
+            "match is fine). Only the fields you pass are changed. Use this instead of "
+            "creating a new task when Sebastian wants to modify one that already exists "
+            "(e.g. 'make that high energy', 'push it to Friday', 'mark it in progress')."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_name": {
+                    "type": "string",
+                    "description": "Name or partial name of the task to edit",
+                },
+                "new_name": {"type": "string", "description": "Rename the task (optional)"},
+                "energy": {
+                    "type": "string",
+                    "description": "New energy level (optional)",
+                    "enum": ["High", "Medium", "Low"],
+                },
+                "due_date": {
+                    "type": "string",
+                    "description": "New due date in YYYY-MM-DD format (optional)",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "New status (optional)",
+                    "enum": ["Not Started", "In Progress", "Done", "Blocked"],
+                },
+                "notes": {"type": "string", "description": "Replace the task's notes (optional)"},
             },
             "required": ["task_name"],
         },
@@ -314,6 +356,15 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
         )
     elif name == "complete_task":
         return await _complete_task(task_name=inputs["task_name"])
+    elif name == "update_task":
+        return await _update_task(
+            task_name=inputs["task_name"],
+            new_name=inputs.get("new_name"),
+            energy=inputs.get("energy"),
+            due_date=inputs.get("due_date"),
+            status=inputs.get("status"),
+            notes=inputs.get("notes"),
+        )
     elif name == "add_idea":
         return await _add_idea(
             name=inputs["name"],
@@ -417,21 +468,60 @@ async def _create_task(name: str, energy: str = "Medium", due_date: str = None) 
     return {"success": True, "id": page["id"], "name": name, "energy": energy}
 
 
-async def _complete_task(task_name: str) -> dict:
+async def _find_task(task_name: str) -> dict | None:
+    """Find the first task whose title contains task_name, or None."""
     result = await notion.data_sources.query(
         data_source_id=TASKS_DS_ID,
         filter={"property": "Task", "title": {"contains": task_name}},
     )
-    if not result["results"]:
+    results = result.get("results", [])
+    return results[0] if results else None
+
+
+async def _complete_task(task_name: str) -> dict:
+    page = await _find_task(task_name)
+    if not page:
         return {"success": False, "error": f"No task found matching '{task_name}'"}
 
-    page = result["results"][0]
     found_name = _title(page["properties"], "Task")
     await notion.pages.update(
         page_id=page["id"],
         properties={"Status": {"select": {"name": STATUS_DONE}}},
     )
     return {"success": True, "completed": found_name}
+
+
+async def _update_task(
+    task_name: str,
+    new_name: str = None,
+    energy: str = None,
+    due_date: str = None,
+    status: str = None,
+    notes: str = None,
+) -> dict:
+    """Edit an existing task — only the fields provided are changed."""
+    page = await _find_task(task_name)
+    if not page:
+        return {"success": False, "error": f"No task found matching '{task_name}'"}
+
+    old_name = _title(page["properties"], "Task")
+    properties: dict = {}
+    if new_name is not None:
+        properties["Task"] = {"title": [{"text": {"content": new_name}}]}
+    if energy is not None:
+        properties["Energy"] = {"select": {"name": ENERGY_MAP.get(energy, energy)}}
+    if status is not None:
+        properties["Status"] = {"select": {"name": STATUS_MAP.get(status, status)}}
+    if due_date is not None:
+        properties["Due Date"] = {"date": {"start": due_date}}
+    if notes is not None:
+        properties["Notes"] = {"rich_text": [{"text": {"content": notes}}]}
+
+    if not properties:
+        return {"success": False, "error": "No changes specified."}
+
+    await notion.pages.update(page_id=page["id"], properties=properties)
+    return {"success": True, "updated": new_name or old_name}
 
 
 async def _add_idea(name: str, category: str = None, notes: str = None) -> dict:
