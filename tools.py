@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytz
-
-logger = logging.getLogger("daily_os_bot.tools")
 from notion_client import AsyncClient as NotionAsyncClient
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+
+logger = logging.getLogger("daily_os_bot.tools")
 
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
