@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -9,6 +10,8 @@ from notion_client import AsyncClient as NotionAsyncClient
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+
+logger = logging.getLogger("daily_os_bot.tools")
 
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -253,59 +256,69 @@ TOOLS = [
 
 
 async def execute_tool(name: str, inputs: dict) -> Any:
+    logger.info("tool call -> %s %s", name, inputs)
     try:
-        if name == "get_tasks":
-            return await _get_tasks(
-                filter_energy=inputs.get("filter_energy"),
-                include_done=inputs.get("include_done", False),
-            )
-        elif name == "create_task":
-            return await _create_task(
-                name=inputs["name"],
-                energy=inputs.get("energy", "Medium"),
-                due_date=inputs.get("due_date"),
-            )
-        elif name == "complete_task":
-            return await _complete_task(task_name=inputs["task_name"])
-        elif name == "add_idea":
-            return await _add_idea(
-                name=inputs["name"],
-                category=inputs.get("category"),
-                notes=inputs.get("notes"),
-            )
-        elif name == "get_projects":
-            return await _get_projects(status=inputs.get("status", "Active"))
-        elif name == "add_project":
-            return await _add_project(
-                name=inputs["name"],
-                description=inputs.get("description"),
-                check_in_frequency=inputs.get("check_in_frequency"),
-            )
-        elif name == "get_reading_list":
-            return await _get_reading_list(status=inputs.get("status"))
-        elif name == "add_reading":
-            return await _add_reading(
-                title=inputs["title"],
-                type=inputs.get("type"),
-                url=inputs.get("url"),
-                notes=inputs.get("notes"),
-            )
-        elif name == "get_calendar_events":
-            return await asyncio.to_thread(_get_calendar_events, inputs.get("days_ahead", 7))
-        elif name == "create_calendar_event":
-            return await asyncio.to_thread(
-                _create_calendar_event,
-                summary=inputs["summary"],
-                start_datetime=inputs["start_datetime"],
-                end_datetime=inputs.get("end_datetime"),
-                all_day=inputs.get("all_day", False),
-                location=inputs.get("location"),
-                description=inputs.get("description"),
-            )
-        else:
-            return {"error": f"Unknown tool: {name}"}
+        result = await _dispatch_tool(name, inputs)
+        logger.info("tool ok   -> %s", name)
+        return result
     except Exception as e:
-        return {"error": str(e)}
+        # Log the full traceback (visible in Railway logs) and return a clear,
+        # specific error so Claude can tell Sebastian exactly what failed and why.
+        logger.exception("tool FAIL -> %s", name)
+        return {"error": f"{type(e).__name__}: {e}", "tool": name}
+
+
+async def _dispatch_tool(name: str, inputs: dict) -> Any:
+    if name == "get_tasks":
+        return await _get_tasks(
+            filter_energy=inputs.get("filter_energy"),
+            include_done=inputs.get("include_done", False),
+        )
+    elif name == "create_task":
+        return await _create_task(
+            name=inputs["name"],
+            energy=inputs.get("energy", "Medium"),
+            due_date=inputs.get("due_date"),
+        )
+    elif name == "complete_task":
+        return await _complete_task(task_name=inputs["task_name"])
+    elif name == "add_idea":
+        return await _add_idea(
+            name=inputs["name"],
+            category=inputs.get("category"),
+            notes=inputs.get("notes"),
+        )
+    elif name == "get_projects":
+        return await _get_projects(status=inputs.get("status", "Active"))
+    elif name == "add_project":
+        return await _add_project(
+            name=inputs["name"],
+            description=inputs.get("description"),
+            check_in_frequency=inputs.get("check_in_frequency"),
+        )
+    elif name == "get_reading_list":
+        return await _get_reading_list(status=inputs.get("status"))
+    elif name == "add_reading":
+        return await _add_reading(
+            title=inputs["title"],
+            type=inputs.get("type"),
+            url=inputs.get("url"),
+            notes=inputs.get("notes"),
+        )
+    elif name == "get_calendar_events":
+        return await asyncio.to_thread(_get_calendar_events, inputs.get("days_ahead", 7))
+    elif name == "create_calendar_event":
+        return await asyncio.to_thread(
+            _create_calendar_event,
+            summary=inputs["summary"],
+            start_datetime=inputs["start_datetime"],
+            end_datetime=inputs.get("end_datetime"),
+            all_day=inputs.get("all_day", False),
+            location=inputs.get("location"),
+            description=inputs.get("description"),
+        )
+    else:
+        return {"error": f"Unknown tool: {name}"}
 
 
 async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> dict:
