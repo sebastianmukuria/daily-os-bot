@@ -6,3 +6,4 @@ google-auth-oauthlib
 google-auth-httplib2
 python-dotenv
 pytz
+PyYAML  # used only by seed.py (one-time seeding utility)
