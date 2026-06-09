@@ -58,6 +58,57 @@ def plan_email(email: dict, classification: dict, records: list) -> dict:
             "confidence": conf, "reason": f"no match for {event} event"}
 
 
+_EVENT_EMOJI = {"rejection": "❌", "interview_scheduled": "📅", "offer": "🎉", "screen_invite": "📞"}
+_EVENT_STATUS = {
+    "applied": "Applied", "screen_invite": "Recruiter Screen",
+    "interview_scheduled": "Interviewing", "offer": "Offer", "rejection": "Rejected",
+}
+
+
+async def apply_plan(plan: dict, email: dict) -> dict:
+    """Execute a create/update/skip plan as Notion writes. Returns
+    {"alert": str|None, "confirm": str|None} — text for Telegram. 'confirm' plans
+    are NOT written; the user resolves them by replying to the confirm message."""
+    import tools
+
+    action = plan["action"]
+    link = tools.gmail_message_link(email["id"])
+    subject = email.get("subject", "")
+
+    if action == "create":
+        await tools._add_application(
+            company=plan["company"], role=plan["role"], status="Applied",
+            thread_id=email.get("thread_id"), confidence="Auto (unreviewed)",
+        )
+        return {"alert": f"🆕 Logged application — {plan['company']}: {plan['role']} (auto)\n{link}",
+                "confirm": None}
+
+    if action == "update":
+        rec = plan["record"]
+        await tools.apply_pipeline_transition(
+            page_id=rec["id"], from_status=rec.get("status"), to_status=plan["to_status"],
+            thread_id=email.get("thread_id"), existing_threads=rec.get("thread_ids", []),
+            event=plan["event"], trigger=subject,
+        )
+        if plan["event"] in _EVENT_EMOJI:
+            emoji = _EVENT_EMOJI[plan["event"]]
+            return {"alert": f"{emoji} {rec['company']} — {rec['role']}: now {plan['to_status']}\n{link}",
+                    "confirm": None}
+        return {"alert": None, "confirm": None}
+
+    if action == "confirm":
+        who = f"{plan.get('company', '?')} — {plan.get('role', '?')}".strip()
+        return {"alert": None, "confirm": (
+            f"❓ Not sure about this job email:\n{subject}\n"
+            f"Looks like: {who} ({plan.get('event', '?')}, conf {plan.get('confidence')})\n"
+            f"{plan['reason']}.\n{link}\n\n"
+            "Reply to this message telling me what to do (e.g. 'log it as applied' "
+            "or 'move Affirm Analyst I to interviewing')."
+        )}
+
+    return {"alert": None, "confirm": None}  # skip
+
+
 async def dry_run(limit: int = 30) -> dict:
     """Read-only pass over the inbox. Returns a report; writes/labels nothing."""
     import tools  # imported here to avoid a circular import at module load
