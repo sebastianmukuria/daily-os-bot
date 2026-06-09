@@ -97,15 +97,28 @@ TOOLS = [
     },
     {
         "name": "create_task",
-        "description": "Create a new task in Sebastian's Notion Tasks database.",
+        "description": (
+            "Create a new task in Sebastian's Notion Tasks database. Always enrich it: "
+            "infer the energy from how demanding the task is, set the type, and link the "
+            "project when it clearly belongs to one. Status starts as Not Started."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "Task name"},
+                "name": {"type": "string", "description": "Task name (polished + emoji)"},
                 "energy": {
                     "type": "string",
-                    "description": "Energy level required. Default: Medium",
+                    "description": "Infer from how cognitively demanding the task is. Default: Medium",
                     "enum": ["High", "Medium", "Low"],
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Task type. Use 'Appointment' for things with a set time/place, 'Admin/Inbox' for quick admin. Default: Task",
+                    "enum": ["Task", "Appointment", "Admin/Inbox"],
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Name (or partial) of the project this task belongs to, to link it. Only set if it clearly fits one of Sebastian's projects.",
                 },
                 "due_date": {
                     "type": "string",
@@ -357,6 +370,8 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
             name=inputs["name"],
             energy=inputs.get("energy", "Medium"),
             due_date=inputs.get("due_date"),
+            type=inputs.get("type", "Task"),
+            project=inputs.get("project"),
         )
     elif name == "complete_task":
         return await _complete_task(task_name=inputs["task_name"])
@@ -456,20 +471,61 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     return {"tasks": tasks, "count": len(tasks)}
 
 
-async def _create_task(name: str, energy: str = "Medium", due_date: str = None) -> dict:
+async def _find_project(name: str) -> dict | None:
+    """Find the first project whose Name contains `name`, or None."""
+    res = await notion.data_sources.query(
+        data_source_id=PROJECTS_DS_ID,
+        filter={"property": "Name", "title": {"contains": name}},
+    )
+    results = res.get("results", [])
+    return results[0] if results else None
+
+
+async def get_project_names() -> list:
+    """Names of active projects — injected into the system prompt so the bot can
+    link new tasks to the right project without an extra lookup."""
+    res = await notion.data_sources.query(
+        data_source_id=PROJECTS_DS_ID,
+        filter={"property": "Status", "select": {"equals": PROJECT_STATUS_MAP["Active"]}},
+    )
+    return [_title(p["properties"], "Name") for p in res.get("results", [])]
+
+
+async def _create_task(
+    name: str,
+    energy: str = "Medium",
+    due_date: str = None,
+    type: str = "Task",
+    project: str = None,
+) -> dict:
     properties: dict = {
         "Task": {"title": [{"text": {"content": name}}]},
         "Energy": {"select": {"name": ENERGY_MAP.get(energy, ENERGY_MAP["Medium"])}},
         "Status": {"select": {"name": STATUS_NOT_STARTED}},
+        "Type": {"select": {"name": type}},
     }
     if due_date:
         properties["Due Date"] = {"date": {"start": due_date}}
+
+    linked_project = None
+    if project:
+        proj = await _find_project(project)
+        if proj:
+            properties["Project"] = {"relation": [{"id": proj["id"]}]}
+            linked_project = _title(proj["properties"], "Name")
 
     page = await notion.pages.create(
         parent={"type": "data_source_id", "data_source_id": TASKS_DS_ID},
         properties=properties,
     )
-    return {"success": True, "id": page["id"], "name": name, "energy": energy}
+    return {
+        "success": True,
+        "id": page["id"],
+        "name": name,
+        "energy": energy,
+        "type": type,
+        "project": linked_project,
+    }
 
 
 async def _find_task(task_name: str) -> dict | None:
