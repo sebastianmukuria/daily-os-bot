@@ -2,6 +2,7 @@ import os
 import re
 import json
 import html
+import time
 import asyncio
 import logging
 from datetime import datetime
@@ -15,7 +16,7 @@ from telegram.constants import ChatAction
 from telegram.error import BadRequest
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, ContextTypes
 import anthropic
-from tools import TOOLS, WEB_SEARCH_TOOL, execute_tool
+from tools import TOOLS, WEB_SEARCH_TOOL, execute_tool, get_project_names
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -48,6 +49,12 @@ Rules for how you respond:
 - Be concise — this is Telegram. Use bullet points, avoid walls of text.
 - Give 1-3 next actions max. Never overwhelm.
 - When someone says "add: X" parse it as a task creation. "done: X" = complete task. "idea: X" = add idea.
+
+Always enrich new tasks (never leave them bare):
+- Energy: infer High / Medium / Low from how cognitively demanding the task is — don't just default to Medium.
+- Type: set it. Usually "Task"; use "Appointment" for things with a set time/place, "Admin/Inbox" for quick admin.
+- Project: if the task clearly belongs to one of Sebastian's active projects (listed near the end of this prompt), pass that project's name to link it.
+- (Status starts as Not Started automatically.)
 
 Naming things — always polish the title and add an emoji:
 - Whenever you create a task, calendar event, idea, project, or reading-list item, never use Sebastian's raw phrasing verbatim. Rewrite it into a concise, title-cased label and ALWAYS include a relevant emoji (placed at the end).
@@ -196,6 +203,22 @@ def _build_user_content(text: str, replied_text: str | None) -> str:
     return text
 
 
+# Cache active project names so we can inject them into the system prompt (for
+# task→project linking) without querying Notion on every single message.
+_projects_cache: dict = {"names": [], "ts": 0.0}
+_PROJECTS_TTL = 600  # seconds
+
+
+async def _active_project_names() -> list:
+    if time.time() - _projects_cache["ts"] > _PROJECTS_TTL:
+        try:
+            _projects_cache["names"] = await get_project_names()
+            _projects_cache["ts"] = time.time()
+        except Exception:
+            logger.warning("could not refresh project list", exc_info=True)
+    return _projects_cache["names"]
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat.id != ALLOWED_CHAT_ID:
         return
@@ -214,7 +237,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     et = pytz.timezone("America/New_York")
     now_str = datetime.now(et).strftime("%A, %B %d, %Y %I:%M %p ET")
-    system = f"{SYSTEM_PROMPT}\n\nCurrent date/time: {now_str}"
+    project_names = await _active_project_names()
+    projects_line = (
+        "Sebastian's active projects (use these names to link tasks): "
+        + "; ".join(project_names)
+        if project_names
+        else "No active projects found."
+    )
+    system = f"{SYSTEM_PROMPT}\n\n{projects_line}\n\nCurrent date/time: {now_str}"
 
     messages = base_history + [{"role": "user", "content": user_content}]
 
