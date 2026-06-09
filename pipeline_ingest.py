@@ -109,6 +109,51 @@ async def apply_plan(plan: dict, email: dict) -> dict:
     return {"alert": None, "confirm": None}  # skip
 
 
+_ACTIVE = ["Offer", "Final Round", "Interviewing", "Recruiter Screen", "Applied"]
+
+
+async def build_daily_digest(ghosted_names: list) -> str:
+    """One Telegram-ready pipeline summary: active count by stage, today's
+    interviews (from Calendar), overdue follow-ups, and anything just ghosted."""
+    import tools
+    from collections import Counter
+
+    pipe = await tools._get_pipeline()
+    apps = pipe["applications"]
+    today = tools._today_et()
+    active = [a for a in apps if a["status"] in _ACTIVE]
+    by = Counter(a["status"] for a in active)
+
+    overdue = [a for a in apps
+               if a.get("next_action_due") and a["next_action_due"] <= today
+               and a["status"] in _ACTIVE]
+
+    try:
+        cal = await asyncio.to_thread(tools._get_calendar_events, 1)
+        interviews = [e for e in cal["events"] if "interview" in (e.get("summary") or "").lower()]
+    except Exception:
+        interviews = []
+
+    lines = [f"📊 Job pipeline — {today}"]
+    if active:
+        breakdown = ", ".join(f"{s} {by[s]}" for s in _ACTIVE if by.get(s))
+        lines.append(f"Active: {len(active)}  ({breakdown})")
+    else:
+        lines.append("No active applications.")
+
+    if interviews:
+        lines.append("\n📅 Interviews today:")
+        lines += [f"  • {e['summary']} ({e['start']})" for e in interviews]
+    if overdue:
+        lines.append("\n⏰ Overdue follow-ups:")
+        lines += [f"  • {a['company']} — {a.get('next_action') or 'follow up'} (due {a['next_action_due']})"
+                  for a in overdue]
+    if ghosted_names:
+        lines.append("\n👻 Newly ghosted (21d quiet): " + ", ".join(ghosted_names))
+
+    return "\n".join(lines)
+
+
 async def dry_run(limit: int = 30) -> dict:
     """Read-only pass over the inbox. Returns a report; writes/labels nothing."""
     import tools  # imported here to avoid a circular import at module load

@@ -253,6 +253,41 @@ async def backfill_update(page_id: str, from_status: str, to_status: str,
         )
 
 
+async def sweep_ghosted(dry: bool = False) -> list:
+    """Move Applied records with 21+ days of no activity to Ghosted. Returns the
+    list of affected 'Company — Role' strings. dry=True lists without writing."""
+    from pipeline_state import should_ghost
+    res = await notion.data_sources.query(
+        data_source_id=JOB_PIPELINE_DS_ID,
+        filter={"property": "Status", "select": {"equals": "Applied"}},
+    )
+    today = _today_et()
+    ghosted = []
+    for page in res.get("results", []):
+        p = page["properties"]
+        if should_ghost("Applied", _date(p, "Last activity"), today):
+            label = f"{_title(p, 'Company')} — {_rich_text(p, 'Role')}"
+            if not dry:
+                # Status only — don't touch threads or Last activity (ghosting isn't activity).
+                await notion.pages.update(
+                    page_id=page["id"],
+                    properties={"Status": {"select": {"name": "Ghosted"}}},
+                )
+                await notion.pages.create(
+                    parent={"type": "data_source_id", "data_source_id": PIPELINE_EVENTS_DS_ID},
+                    properties={
+                        "Event": {"title": [{"text": {"content": "Applied → Ghosted"}}]},
+                        "Timestamp": {"date": {"start": today}},
+                        "From Status": {"rich_text": [{"text": {"content": "Applied"}}]},
+                        "To Status": {"rich_text": [{"text": {"content": "Ghosted"}}]},
+                        "Trigger": {"rich_text": [{"text": {"content": "ghosted sweep (21d no activity)"}}]},
+                        "Application": {"relation": [{"id": page["id"]}]},
+                    },
+                )
+            ghosted.append(label)
+    return ghosted
+
+
 async def gather_pipeline_records() -> list:
     """All Job Pipeline records as {id, company, role, status, thread_ids[list]} —
     the input the matcher needs to dedupe incoming emails against existing records."""

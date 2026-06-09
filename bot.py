@@ -5,7 +5,8 @@ import html
 import time
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, time as dtime
+from zoneinfo import ZoneInfo
 import pytz
 from dotenv import load_dotenv
 
@@ -33,6 +34,7 @@ ALLOWED_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "5384689298"))
 MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096
 PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "20"))
+PIPELINE_DIGEST_HOUR = int(os.environ.get("PIPELINE_DIGEST_HOUR", "8"))  # ET
 # Switch models without code changes: set CLAUDE_MODEL in the environment.
 # Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
@@ -403,6 +405,18 @@ async def pipeline_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.exception("pipeline_poll: failed on message %s", email.get("id"))
 
 
+async def pipeline_daily(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Daily job: ghost stale Applieds, then send the pipeline digest."""
+    import tools
+    from pipeline_ingest import build_daily_digest
+    try:
+        ghosted = await tools.sweep_ghosted()
+        text = await build_daily_digest(ghosted)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text)
+    except Exception:
+        logger.exception("pipeline_daily failed")
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Catch-all so an unhandled error logs instead of printing a bare traceback."""
     logger.error("Unhandled error", exc_info=context.error)
@@ -421,7 +435,12 @@ def main() -> None:
         app.job_queue.run_repeating(
             pipeline_poll, interval=PIPELINE_POLL_MINUTES * 60, first=30,
         )
-        logger.info("Pipeline poll scheduled every %s min", PIPELINE_POLL_MINUTES)
+        app.job_queue.run_daily(
+            pipeline_daily,
+            time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
+        )
+        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET",
+                    PIPELINE_POLL_MINUTES, PIPELINE_DIGEST_HOUR)
     else:
         logger.warning("JobQueue unavailable — install python-telegram-bot[job-queue] "
                        "to enable Gmail pipeline ingestion")
