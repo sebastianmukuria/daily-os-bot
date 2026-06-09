@@ -8,10 +8,12 @@ on:
       - "pipeline_classifier.py"
       - "pipeline_state.py"
       - "pipeline_ingest.py"
+      - "pipeline_backfill.py"
       - "fixtures/**"
       - "test_classifier.py"
       - "test_pipeline_state.py"
       - "test_pipeline_ingest.py"
+      - "test_pipeline_backfill.py"
   workflow_dispatch:
 
 jobs:
@@ -30,3 +32,5 @@ jobs:
         run: python3 test_pipeline_state.py
       - name: Ingest planner tests
         run: python3 test_pipeline_ingest.py
+      - name: Backfill tests
+        run: python3 test_pipeline_backfill.py

@@ -6,6 +6,7 @@ token.pickle
 
 # Personal data
 seed_data.yaml
+backfill_cache.json
 
 # Python
 __pycache__/
