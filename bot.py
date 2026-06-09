@@ -74,7 +74,12 @@ You have access to:
 - Notion Reading List DB (get list, add books/articles/papers/videos/podcasts)
 - Google Calendar (view upcoming events, create new events, edit existing events)
 - Habits tracker (show habits, mark a habit done for today, add a habit)
+- Job Pipeline (track job applications: add, update status, add notes, view pipeline)
 - Web search (look up current info, facts, and event details)
+
+Job pipeline:
+- When Sebastian says he applied somewhere, use add_application (Status defaults to Applied). When he gets a recruiter screen / interview / offer / rejection, use update_application to move the status. Use add_application_note for updates worth keeping (it timestamps them).
+- get_pipeline shows the current pipeline. Records are PER-ROLE — one company can have several (e.g. Analyst I and II). If it's ambiguous which role he means, ask.
 
 Habits vs. tasks:
 - Habits are recurring things he wants to do regularly (gym, vitamins, meditation, journaling). They live in a separate Habits tracker — NOT the Tasks DB. Never create a task for a recurring habit.
@@ -342,6 +347,29 @@ async def handle_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text("Conversation cleared.")
 
 
+async def handle_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Quick job-pipeline view, grouped by status — no LLM call."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    result = await execute_tool("get_pipeline", {})
+    apps = result.get("applications", [])
+    if not apps:
+        await send_reply(update, "No applications in the pipeline yet. Tell me about one and I'll add it.")
+        return
+
+    lines = ["**Job Pipeline**"]
+    current_status = None
+    for a in apps:
+        if a["status"] != current_status:
+            current_status = a["status"]
+            lines.append(f"\n**{current_status}**")
+        role = f" — {a['role']}" if a.get("role") else ""
+        nxt = f"  · next: {a['next_action']}" if a.get("next_action") else ""
+        lines.append(f"• {a['company']}{role}{nxt}")
+    await send_reply(update, "\n".join(lines))
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Catch-all so an unhandled error logs instead of printing a bare traceback."""
     logger.error("Unhandled error", exc_info=context.error)
@@ -351,6 +379,7 @@ def main() -> None:
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("clear", handle_clear))
+    app.add_handler(CommandHandler("pipeline", handle_pipeline))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(on_error)
     logger.info("Daily OS bot polling on model %s... Ctrl+C to stop.", CLAUDE_MODEL)
