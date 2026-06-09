@@ -19,7 +19,10 @@ import os
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = [
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/gmail.modify",  # read mail + apply JobTracker label
+]
 CREDS_PATH = os.path.join(os.path.dirname(__file__), "credentials.json")
 TOKEN_PATH = os.path.join(os.path.dirname(__file__), "token.json")
 
