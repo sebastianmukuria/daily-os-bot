@@ -40,8 +40,8 @@ from pipeline_state import (
 
 _ET = pytz.timezone("America/New_York")
 CACHE_PATH = os.path.join(os.path.dirname(__file__), "backfill_cache.json")
-# Keep classification under entry-tier rate limits (raise on a higher API tier).
-BACKFILL_CONCURRENCY = int(os.environ.get("BACKFILL_CONCURRENCY", "2"))
+# Pace classification under entry-tier rate limits (lower the pause on a higher tier).
+BACKFILL_PACE_SEC = float(os.environ.get("BACKFILL_PACE_SEC", "1.4"))
 
 # First event of a group seeds the status from its event type.
 SEED_STATUS = {
@@ -268,28 +268,26 @@ async def collect(limit: int, cache: dict) -> list:
     job = [m for m in raw if prefilter(m)["job_related"]]
     cached_n = sum(1 for m in job if m["id"] in cache)
     print(f"fetched {len(raw)} messages, {len(job)} job-related "
-          f"({cached_n} already cached); classifying...")
+          f"({cached_n} already cached); classifying {len(job) - cached_n} more...")
 
-    # Low concurrency + SDK backoff keeps us under entry-tier rate limits; the
-    # cache is saved after EACH classification so an interrupted run resumes cheaply.
+    # Entry-tier limits are tight (50 req/min, 30k input-TPM), so classify strictly
+    # sequentially with a deliberate pause, and save after EACH so an interrupted
+    # run resumes from cache. SDK retries (max_retries) absorb the occasional 429.
     client = anthropic.Anthropic(max_retries=8)
-    sem = asyncio.Semaphore(BACKFILL_CONCURRENCY)
-
-    async def classify(m):
-        if m["id"] not in cache:
-            async with sem:
-                cache[m["id"]] = await asyncio.to_thread(classify_email, m, client)
-            _save_cache(cache)
-        c = cache[m["id"]]
-        m.update({"company": c["company"], "role": c["role"],
-                  "event_type": c["event_type"], "confidence": c["confidence"]})
-        return m
-
     try:
-        classified = await asyncio.gather(*[classify(m) for m in job])
+        for i, m in enumerate(job):
+            if m["id"] not in cache:
+                cache[m["id"]] = await asyncio.to_thread(classify_email, m, client)
+                _save_cache(cache)
+                await asyncio.sleep(BACKFILL_PACE_SEC)  # stay under ~50 req/min
+                if (i + 1) % 10 == 0:
+                    print(f"  classified {i + 1}/{len(job)}")
+            c = cache[m["id"]]
+            m.update({"company": c["company"], "role": c["role"],
+                      "event_type": c["event_type"], "confidence": c["confidence"]})
     finally:
         _save_cache(cache)
-    return [m for m in classified if m["event_type"] != "other"]
+    return [m for m in job if m["event_type"] != "other"]
 
 
 def print_plan(decisions: list, recons: list) -> None:
