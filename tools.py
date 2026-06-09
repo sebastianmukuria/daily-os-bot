@@ -22,6 +22,18 @@ IDEAS_DS_ID = "b70516f3-6782-4256-837e-85bb5ce11b62"
 PROJECTS_DS_ID = "c99375ae-b7d5-4225-bd45-fe7e204c4e9c"
 READING_DS_ID = "29aba34c-4a58-4096-8c7f-f649976e7639"
 HABITS_DS_ID = "818e9cd3-48a1-413e-9d38-aa74c6b4e480"
+JOB_PIPELINE_DS_ID = "551e0098-cf2f-41eb-8dff-437501636fbe"
+PIPELINE_EVENTS_DS_ID = "bf426aeb-7a4c-45d5-83ac-7155e28cca79"
+
+PIPELINE_STATUSES = [
+    "Applied", "Recruiter Screen", "Interviewing", "Final Round",
+    "Offer", "Rejected", "Withdrawn", "Ghosted",
+]
+# Sort order for pipeline views: most promising / active first, closed last.
+PIPELINE_STATUS_ORDER = {s: i for i, s in enumerate(
+    ["Offer", "Final Round", "Interviewing", "Recruiter Screen", "Applied",
+     "Ghosted", "Rejected", "Withdrawn"]
+)}
 
 # Real select option names in the Notion DBs (with emoji prefixes)
 ENERGY_MAP = {"High": "⚡ High", "Medium": "🔋 Medium", "Low": "🪫 Low"}
@@ -382,6 +394,82 @@ TOOLS = [
             "required": ["name"],
         },
     },
+    {
+        "name": "get_pipeline",
+        "description": "Get Sebastian's job applications from the Job Pipeline, optionally filtered by status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Optional: filter by status",
+                    "enum": PIPELINE_STATUSES,
+                },
+            },
+        },
+    },
+    {
+        "name": "add_application",
+        "description": (
+            "Log a new job application in the pipeline. Use when Sebastian says he applied "
+            "to a role. Records are per-role (one company can have several). Status defaults "
+            "to Applied, Confidence to Confirmed (he entered it manually)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "Company name"},
+                "role": {"type": "string", "description": "Role title"},
+                "status": {"type": "string", "enum": PIPELINE_STATUSES, "description": "Default: Applied"},
+                "posting_url": {"type": "string", "description": "Link to the job posting (optional)"},
+                "source": {
+                    "type": "string",
+                    "enum": ["Direct", "LinkedIn", "Referral", "Recruiter inbound"],
+                    "description": "How he found/applied (optional)",
+                },
+                "location": {
+                    "type": "string",
+                    "enum": ["SoCal", "Remote", "Hybrid", "Relocation"],
+                    "description": "Location type (optional)",
+                },
+                "applied_date": {"type": "string", "description": "YYYY-MM-DD (optional; defaults to today)"},
+            },
+            "required": ["company", "role"],
+        },
+    },
+    {
+        "name": "update_application",
+        "description": (
+            "Update an existing application — change its status, stage detail, or next action. "
+            "Finds it by company (and role if given). Use for 'move X to interviewing', "
+            "'got rejected from Y', 'offer from Z'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "Company name (partial ok)"},
+                "role": {"type": "string", "description": "Role, to disambiguate if multiple at one company (optional)"},
+                "status": {"type": "string", "enum": PIPELINE_STATUSES, "description": "New status (optional)"},
+                "stage_detail": {"type": "string", "description": "Free-text stage detail (optional)"},
+                "next_action": {"type": "string", "description": "Next action text (optional)"},
+                "next_action_due": {"type": "string", "description": "Next action due date YYYY-MM-DD (optional)"},
+            },
+            "required": ["company"],
+        },
+    },
+    {
+        "name": "add_application_note",
+        "description": "Append a timestamped note to an application's stage detail.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "company": {"type": "string", "description": "Company name (partial ok)"},
+                "role": {"type": "string", "description": "Role, to disambiguate (optional)"},
+                "note": {"type": "string", "description": "The note to append"},
+            },
+            "required": ["company", "note"],
+        },
+    },
 ]
 
 # Server-side tool: Anthropic's API runs the search itself and returns the results
@@ -479,6 +567,33 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
         return await _log_habit(habit_name=inputs["habit_name"])
     elif name == "add_habit":
         return await _add_habit(name=inputs["name"], cadence=inputs.get("cadence", "Daily"))
+    elif name == "get_pipeline":
+        return await _get_pipeline(status=inputs.get("status"))
+    elif name == "add_application":
+        return await _add_application(
+            company=inputs["company"],
+            role=inputs["role"],
+            status=inputs.get("status", "Applied"),
+            posting_url=inputs.get("posting_url"),
+            source=inputs.get("source"),
+            location=inputs.get("location"),
+            applied_date=inputs.get("applied_date"),
+        )
+    elif name == "update_application":
+        return await _update_application(
+            company=inputs["company"],
+            role=inputs.get("role"),
+            status=inputs.get("status"),
+            stage_detail=inputs.get("stage_detail"),
+            next_action=inputs.get("next_action"),
+            next_action_due=inputs.get("next_action_due"),
+        )
+    elif name == "add_application_note":
+        return await _add_application_note(
+            company=inputs["company"],
+            role=inputs.get("role"),
+            note=inputs["note"],
+        )
     else:
         return {"error": f"Unknown tool: {name}"}
 
@@ -904,6 +1019,166 @@ async def _add_habit(name: str, cadence: str = "Daily") -> dict:
         },
     )
     return {"success": True, "id": page["id"], "name": name, "cadence": cadence}
+
+
+# --- Job Pipeline ---
+
+def _today_et() -> str:
+    return datetime.now(pytz.timezone(ET)).date().isoformat()
+
+
+def _filter_by_role(pages: list, role: str = None) -> list:
+    """Narrow company matches by role using the tightest tier that hits, so that
+    'Analyst I' doesn't also match 'Analyst II' (substring overlap)."""
+    if not role:
+        return pages
+    r = role.strip().lower()
+
+    def role_of(pg):
+        return (_rich_text(pg["properties"], "Role") or "").strip().lower()
+
+    exact = [p for p in pages if role_of(p) == r]
+    if exact:
+        return exact
+    edge = [p for p in pages if role_of(p).endswith(r) or role_of(p).startswith(r)]
+    if edge:
+        return edge
+    return [p for p in pages if r in role_of(p)]
+
+
+async def _find_applications(company: str, role: str = None) -> list:
+    res = await notion.data_sources.query(
+        data_source_id=JOB_PIPELINE_DS_ID,
+        filter={"property": "Company", "title": {"contains": company}},
+    )
+    return _filter_by_role(res.get("results", []), role)
+
+
+def _ambiguous_result(matches: list) -> dict:
+    return {
+        "success": False,
+        "ambiguous": True,
+        "error": "Multiple matching applications — ask Sebastian which role.",
+        "matches": [
+            {"company": _title(p["properties"], "Company"),
+             "role": _rich_text(p["properties"], "Role"),
+             "status": _select(p["properties"], "Status")}
+            for p in matches
+        ],
+    }
+
+
+async def _get_pipeline(status: str = None) -> dict:
+    params: dict = {"data_source_id": JOB_PIPELINE_DS_ID}
+    if status:
+        params["filter"] = {"property": "Status", "select": {"equals": status}}
+    res = await notion.data_sources.query(**params)
+
+    apps = []
+    for page in res.get("results", []):
+        p = page["properties"]
+        apps.append({
+            "company": _title(p, "Company"),
+            "role": _rich_text(p, "Role"),
+            "status": _select(p, "Status"),
+            "stage_detail": _rich_text(p, "Stage detail"),
+            "next_action": _rich_text(p, "Next action"),
+            "next_action_due": _date(p, "Next action due"),
+            "applied_date": _date(p, "Applied date"),
+            "last_activity": _date(p, "Last activity"),
+            "location": _select(p, "Location"),
+        })
+    apps.sort(key=lambda a: (PIPELINE_STATUS_ORDER.get(a.get("status") or "", 99), a.get("company") or ""))
+    return {"applications": apps, "count": len(apps)}
+
+
+async def _add_application(
+    company: str,
+    role: str,
+    status: str = "Applied",
+    posting_url: str = None,
+    source: str = None,
+    location: str = None,
+    applied_date: str = None,
+) -> dict:
+    today = _today_et()
+    props: dict = {
+        "Company": {"title": [{"text": {"content": company}}]},
+        "Role": {"rich_text": [{"text": {"content": role}}]},
+        "Status": {"select": {"name": status}},
+        "Confidence": {"select": {"name": "Confirmed"}},
+        "Applied date": {"date": {"start": applied_date or today}},
+        "Last activity": {"date": {"start": today}},
+    }
+    if posting_url:
+        props["Posting URL"] = {"url": posting_url}
+    if source:
+        props["Source"] = {"select": {"name": source}}
+    if location:
+        props["Location"] = {"select": {"name": location}}
+
+    page = await notion.pages.create(
+        parent={"type": "data_source_id", "data_source_id": JOB_PIPELINE_DS_ID},
+        properties=props,
+    )
+    return {"success": True, "id": page["id"], "company": company, "role": role, "status": status}
+
+
+async def _update_application(
+    company: str,
+    role: str = None,
+    status: str = None,
+    stage_detail: str = None,
+    next_action: str = None,
+    next_action_due: str = None,
+) -> dict:
+    matches = await _find_applications(company, role)
+    if not matches:
+        return {"success": False, "error": f"No application found for '{company}'"}
+    if len(matches) > 1:
+        return _ambiguous_result(matches)
+    page = matches[0]
+
+    props: dict = {"Last activity": {"date": {"start": _today_et()}}}
+    if status is not None:
+        props["Status"] = {"select": {"name": status}}
+    if stage_detail is not None:
+        props["Stage detail"] = {"rich_text": [{"text": {"content": stage_detail}}]}
+    if next_action is not None:
+        props["Next action"] = {"rich_text": [{"text": {"content": next_action}}]}
+    if next_action_due is not None:
+        props["Next action due"] = {"date": {"start": next_action_due}}
+
+    await notion.pages.update(page_id=page["id"], properties=props)
+    p = page["properties"]
+    return {
+        "success": True,
+        "company": _title(p, "Company"),
+        "role": _rich_text(p, "Role"),
+        "status": status or _select(p, "Status"),
+    }
+
+
+async def _add_application_note(company: str, note: str, role: str = None) -> dict:
+    matches = await _find_applications(company, role)
+    if not matches:
+        return {"success": False, "error": f"No application found for '{company}'"}
+    if len(matches) > 1:
+        return _ambiguous_result(matches)
+    page = matches[0]
+
+    p = page["properties"]
+    existing = _rich_text(p, "Stage detail") or ""
+    line = f"[{_today_et()}] {note}"
+    new_detail = f"{existing}\n{line}" if existing else line
+    await notion.pages.update(
+        page_id=page["id"],
+        properties={
+            "Stage detail": {"rich_text": [{"text": {"content": new_detail[:2000]}}]},
+            "Last activity": {"date": {"start": _today_et()}},
+        },
+    )
+    return {"success": True, "company": _title(p, "Company"), "note_added": note}
 
 
 # --- Property helpers ---
