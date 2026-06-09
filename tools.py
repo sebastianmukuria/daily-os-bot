@@ -1140,6 +1140,36 @@ def _update_calendar_event(
     }
 
 
+def get_calendar_events_window(hours_back: int = 0, days_ahead: int = 2) -> list:
+    """Events from `hours_back` ago to `days_ahead` ahead, with id + attendee
+    emails — used by the interview watcher (which needs recent-past events for
+    debrief prompts and attendees for interview detection)."""
+    service = _get_calendar_service()
+    et = pytz.timezone(ET)
+    now = datetime.now(et)
+    result = (
+        service.events().list(
+            calendarId="primary",
+            timeMin=(now - timedelta(hours=hours_back)).isoformat(),
+            timeMax=(now + timedelta(days=days_ahead)).isoformat(),
+            singleEvents=True, orderBy="startTime", maxResults=50,
+        ).execute()
+    )
+    out = []
+    for e in result.get("items", []):
+        start = e["start"].get("dateTime")  # skip all-day (no dateTime)
+        if not start:
+            continue
+        out.append({
+            "id": e["id"],
+            "summary": e.get("summary", ""),
+            "start": start,
+            "location": e.get("location", ""),
+            "attendees": [a.get("email", "") for a in e.get("attendees", [])],
+        })
+    return out
+
+
 def _get_calendar_events(days_ahead: int = 7) -> dict:
     service = _get_calendar_service()
     et = pytz.timezone("America/New_York")

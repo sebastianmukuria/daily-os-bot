@@ -9,11 +9,13 @@ on:
       - "pipeline_state.py"
       - "pipeline_ingest.py"
       - "pipeline_backfill.py"
+      - "pipeline_interviews.py"
       - "fixtures/**"
       - "test_classifier.py"
       - "test_pipeline_state.py"
       - "test_pipeline_ingest.py"
       - "test_pipeline_backfill.py"
+      - "test_pipeline_interviews.py"
   workflow_dispatch:
 
 jobs:
@@ -34,3 +36,5 @@ jobs:
         run: python3 test_pipeline_ingest.py
       - name: Backfill tests
         run: python3 test_pipeline_backfill.py
+      - name: Interview-watch tests
+        run: python3 test_pipeline_interviews.py
