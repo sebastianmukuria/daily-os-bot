@@ -178,6 +178,81 @@ def gmail_apply_processed_label(message_id: str) -> None:
     ).execute()
 
 
+def gmail_fetch_all(query: str, max_results: int = 2000) -> list:
+    """Like gmail_fetch_candidates but paginates the full result set and includes
+    `ts` (internalDate, epoch ms) — needed by the backfill to replay events in
+    chronological order. Used for the one-time 90-day scan, not the live poller."""
+    service = _get_gmail_service()
+    out, token = [], None
+    while len(out) < max_results:
+        resp = service.users().messages().list(
+            userId="me", q=query, pageToken=token,
+            maxResults=min(100, max_results - len(out)),
+        ).execute()
+        for ref in resp.get("messages", []):
+            msg = service.users().messages().get(
+                userId="me", id=ref["id"], format="metadata",
+                metadataHeaders=["From", "To", "Subject"],
+            ).execute()
+            headers = msg.get("payload", {}).get("headers", [])
+            out.append({
+                "id": msg["id"],
+                "thread_id": msg.get("threadId"),
+                "ts": int(msg.get("internalDate", 0)),
+                "from": _header(headers, "From"),
+                "to": [a.strip() for a in _header(headers, "To").split(",") if a.strip()],
+                "subject": _header(headers, "Subject"),
+                "snippet": msg.get("snippet", ""),
+            })
+        token = resp.get("nextPageToken")
+        if not token:
+            break
+    return out
+
+
+async def backfill_create(company: str, role: str, status: str, thread_ids: list,
+                          applied_date: str, last_activity: str,
+                          confidence: str = "Auto (unreviewed)") -> str:
+    """Create a pipeline record stamped with REAL historical dates (not today)."""
+    props: dict = {
+        "Company": {"title": [{"text": {"content": company}}]},
+        "Role": {"rich_text": [{"text": {"content": role}}]},
+        "Status": {"select": {"name": status}},
+        "Confidence": {"select": {"name": confidence}},
+        "Applied date": {"date": {"start": applied_date}},
+        "Last activity": {"date": {"start": last_activity}},
+        "Gmail thread IDs": {"rich_text": [{"text": {"content": ", ".join(thread_ids)[:2000]}}]},
+    }
+    page = await notion.pages.create(
+        parent={"type": "data_source_id", "data_source_id": JOB_PIPELINE_DS_ID},
+        properties=props,
+    )
+    return page["id"]
+
+
+async def backfill_update(page_id: str, from_status: str, to_status: str,
+                          thread_ids: list, last_activity: str) -> None:
+    """Forward-only update with real Last activity; logs ONE net Pipeline Events
+    row only if the status actually changed (avoids re-run log spam)."""
+    await notion.pages.update(page_id=page_id, properties={
+        "Status": {"select": {"name": to_status}},
+        "Last activity": {"date": {"start": last_activity}},
+        "Gmail thread IDs": {"rich_text": [{"text": {"content": ", ".join(thread_ids)[:2000]}}]},
+    })
+    if to_status != from_status:
+        await notion.pages.create(
+            parent={"type": "data_source_id", "data_source_id": PIPELINE_EVENTS_DS_ID},
+            properties={
+                "Event": {"title": [{"text": {"content": f"{from_status or '—'} → {to_status}"}}]},
+                "Timestamp": {"date": {"start": last_activity}},
+                "From Status": {"rich_text": [{"text": {"content": from_status or ""}}]},
+                "To Status": {"rich_text": [{"text": {"content": to_status}}]},
+                "Trigger": {"rich_text": [{"text": {"content": "backfill"}}]},
+                "Application": {"relation": [{"id": page_id}]},
+            },
+        )
+
+
 async def gather_pipeline_records() -> list:
     """All Job Pipeline records as {id, company, role, status, thread_ids[list]} —
     the input the matcher needs to dedupe incoming emails against existing records."""
