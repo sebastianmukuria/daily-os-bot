@@ -13,7 +13,12 @@ from googleapiclient.discovery import build
 
 logger = logging.getLogger("daily_os_bot.tools")
 
-GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+# Full set granted at auth time. Gmail uses 'modify' (read messages + apply the
+# JobTracker label; never delete). The token itself records which scopes were
+# actually granted — see _load_google_creds.
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar", GMAIL_SCOPE]
+PROCESSED_LABEL = "JobTracker/Processed"
 
 # These are Notion *data source* IDs (new 2025-09-03 API). Querying happens on
 # data sources, not databases. Page creation uses a data_source_id parent.
@@ -56,33 +61,77 @@ notion = NotionAsyncClient(auth=os.environ.get("NOTION_TOKEN", ""))
 TOKEN_PATH = os.path.join(os.path.dirname(__file__), "token.json")
 
 
-def _load_calendar_creds() -> Credentials:
+def _load_google_creds() -> Credentials:
     """Load Google creds from the GOOGLE_TOKEN_JSON env var (cloud) or token.json (local).
 
+    We deliberately do NOT force a scopes list here — the credentials use whatever
+    scopes the token was actually granted (stored in the token). That way adding the
+    Gmail scope is purely a re-auth step: no scope-mismatch refresh errors, and
+    Calendar keeps working on an older calendar-only token.
+
     On ephemeral hosts (Railway/Render) the filesystem is wiped on redeploy, so the
-    token can't live in a file there — set GOOGLE_TOKEN_JSON instead. Locally,
-    auth_google.py writes token.json.
+    token can't live in a file there — set GOOGLE_TOKEN_JSON instead.
     """
     env_token = os.environ.get("GOOGLE_TOKEN_JSON")
     if env_token:
-        return Credentials.from_authorized_user_info(json.loads(env_token), GOOGLE_SCOPES)
+        return Credentials.from_authorized_user_info(json.loads(env_token))
     if os.path.exists(TOKEN_PATH):
-        return Credentials.from_authorized_user_file(TOKEN_PATH, GOOGLE_SCOPES)
+        return Credentials.from_authorized_user_file(TOKEN_PATH)
     raise RuntimeError(
-        "Google Calendar not authenticated. Run auth_google.py locally, then either keep "
+        "Google not authenticated. Run auth_google.py locally, then either keep "
         "token.json or set GOOGLE_TOKEN_JSON in your environment."
     )
 
 
-def _get_calendar_service():
-    creds = _load_calendar_creds()
+def _google_creds_refreshed() -> Credentials:
+    creds = _load_google_creds()
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
         # Persist the refreshed token to file only when running file-based (local).
         if not os.environ.get("GOOGLE_TOKEN_JSON"):
             with open(TOKEN_PATH, "w") as f:
                 f.write(creds.to_json())
-    return build("calendar", "v3", credentials=creds)
+    return creds
+
+
+def _get_calendar_service():
+    return build("calendar", "v3", credentials=_google_creds_refreshed())
+
+
+def _get_gmail_service():
+    creds = _google_creds_refreshed()
+    if GMAIL_SCOPE not in (creds.scopes or []):
+        raise RuntimeError(
+            "Gmail isn't authorized yet. Re-run auth_google.py (it now requests Gmail "
+            "too), then update token.json / GOOGLE_TOKEN_JSON."
+        )
+    return build("gmail", "v1", credentials=creds)
+
+
+def gmail_processed_label_id(service) -> str:
+    """Get the JobTracker/Processed label id, creating the label if needed."""
+    labels = service.users().labels().list(userId="me").execute().get("labels", [])
+    for label in labels:
+        if label["name"] == PROCESSED_LABEL:
+            return label["id"]
+    created = service.users().labels().create(
+        userId="me",
+        body={
+            "name": PROCESSED_LABEL,
+            "labelListVisibility": "labelShow",
+            "messageListVisibility": "show",
+        },
+    ).execute()
+    return created["id"]
+
+
+def gmail_check() -> dict:
+    """Plumbing self-test: confirm Gmail auth works and the processed-label exists.
+    Used to validate Phase C before any ingestion logic is built on top."""
+    service = _get_gmail_service()
+    profile = service.users().getProfile(userId="me").execute()
+    label_id = gmail_processed_label_id(service)
+    return {"email": profile.get("emailAddress"), "processed_label_id": label_id}
 
 
 TOOLS = [
