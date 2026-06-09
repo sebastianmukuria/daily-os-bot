@@ -21,6 +21,7 @@ TASKS_DS_ID = "b550275a-0137-4cab-9231-7950e838eb34"
 IDEAS_DS_ID = "b70516f3-6782-4256-837e-85bb5ce11b62"
 PROJECTS_DS_ID = "c99375ae-b7d5-4225-bd45-fe7e204c4e9c"
 READING_DS_ID = "29aba34c-4a58-4096-8c7f-f649976e7639"
+HABITS_DS_ID = "818e9cd3-48a1-413e-9d38-aa74c6b4e480"
 
 # Real select option names in the Notion DBs (with emoji prefixes)
 ENERGY_MAP = {"High": "⚡ High", "Medium": "🔋 Medium", "Low": "🪫 Low"}
@@ -339,6 +340,48 @@ TOOLS = [
             "required": ["event_id"],
         },
     },
+    {
+        "name": "get_habits",
+        "description": (
+            "Get Sebastian's recurring habits (gym, vitamins, meditation, etc.) with "
+            "their cadence, current streak, and whether each is already done today."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "log_habit",
+        "description": (
+            "Mark a habit as done for today (updates its streak). Use this when "
+            "Sebastian says he did something habitual, e.g. 'took my vitamins', "
+            "'went to the gym', 'meditated'. Finds the habit by name (partial match)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "habit_name": {
+                    "type": "string",
+                    "description": "Name or partial name of the habit to check off",
+                },
+            },
+            "required": ["habit_name"],
+        },
+    },
+    {
+        "name": "add_habit",
+        "description": "Create a new recurring habit to track.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Habit name (polished + emoji)"},
+                "cadence": {
+                    "type": "string",
+                    "description": "How often. Default: Daily",
+                    "enum": ["Daily", "Weekdays", "MWF", "Weekly"],
+                },
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 # Server-side tool: Anthropic's API runs the search itself and returns the results
@@ -430,6 +473,12 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
             location=inputs.get("location"),
             description=inputs.get("description"),
         )
+    elif name == "get_habits":
+        return await _get_habits()
+    elif name == "log_habit":
+        return await _log_habit(habit_name=inputs["habit_name"])
+    elif name == "add_habit":
+        return await _add_habit(name=inputs["name"], cadence=inputs.get("cadence", "Daily"))
     else:
         return {"error": f"Unknown tool: {name}"}
 
@@ -784,6 +833,77 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
         })
 
     return {"events": events, "count": len(events)}
+
+
+# --- Habits ---
+
+async def _find_habit(name: str) -> dict | None:
+    res = await notion.data_sources.query(
+        data_source_id=HABITS_DS_ID,
+        filter={"property": "Name", "title": {"contains": name}},
+    )
+    results = res.get("results", [])
+    return results[0] if results else None
+
+
+async def _get_habits() -> dict:
+    res = await notion.data_sources.query(
+        data_source_id=HABITS_DS_ID,
+        filter={"property": "Active", "checkbox": {"equals": True}},
+    )
+    today = datetime.now(pytz.timezone(ET)).date().isoformat()
+    habits = []
+    for page in res.get("results", []):
+        props = page["properties"]
+        last = _date(props, "Last Done")
+        habits.append({
+            "name": _title(props, "Name"),
+            "cadence": _select(props, "Cadence"),
+            "streak": props.get("Streak", {}).get("number") or 0,
+            "last_done": last,
+            "done_today": last == today,
+        })
+    return {"habits": habits, "count": len(habits)}
+
+
+async def _log_habit(habit_name: str) -> dict:
+    page = await _find_habit(habit_name)
+    if not page:
+        return {"success": False, "error": f"No habit found matching '{habit_name}'"}
+
+    props = page["properties"]
+    name = _title(props, "Name")
+    last = _date(props, "Last Done")
+    streak = props.get("Streak", {}).get("number") or 0
+
+    today = datetime.now(pytz.timezone(ET)).date()
+    today_s = today.isoformat()
+    if last == today_s:
+        return {"success": True, "habit": name, "already_done_today": True, "streak": streak}
+
+    yesterday_s = (today - timedelta(days=1)).isoformat()
+    new_streak = streak + 1 if last == yesterday_s else 1
+    await notion.pages.update(
+        page_id=page["id"],
+        properties={
+            "Last Done": {"date": {"start": today_s}},
+            "Streak": {"number": new_streak},
+        },
+    )
+    return {"success": True, "habit": name, "streak": new_streak}
+
+
+async def _add_habit(name: str, cadence: str = "Daily") -> dict:
+    page = await notion.pages.create(
+        parent={"type": "data_source_id", "data_source_id": HABITS_DS_ID},
+        properties={
+            "Name": {"title": [{"text": {"content": name}}]},
+            "Cadence": {"select": {"name": cadence}},
+            "Active": {"checkbox": True},
+            "Streak": {"number": 0},
+        },
+    )
+    return {"success": True, "id": page["id"], "name": name, "cadence": cadence}
 
 
 # --- Property helpers ---
