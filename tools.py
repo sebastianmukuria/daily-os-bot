@@ -1211,13 +1211,15 @@ async def _add_application(
     source: str = None,
     location: str = None,
     applied_date: str = None,
+    thread_id: str = None,
+    confidence: str = "Confirmed",
 ) -> dict:
     today = _today_et()
     props: dict = {
         "Company": {"title": [{"text": {"content": company}}]},
         "Role": {"rich_text": [{"text": {"content": role}}]},
         "Status": {"select": {"name": status}},
-        "Confidence": {"select": {"name": "Confirmed"}},
+        "Confidence": {"select": {"name": confidence}},
         "Applied date": {"date": {"start": applied_date or today}},
         "Last activity": {"date": {"start": today}},
     }
@@ -1227,12 +1229,47 @@ async def _add_application(
         props["Source"] = {"select": {"name": source}}
     if location:
         props["Location"] = {"select": {"name": location}}
+    if thread_id:
+        props["Gmail thread IDs"] = {"rich_text": [{"text": {"content": thread_id}}]}
 
     page = await notion.pages.create(
         parent={"type": "data_source_id", "data_source_id": JOB_PIPELINE_DS_ID},
         properties=props,
     )
     return {"success": True, "id": page["id"], "company": company, "role": role, "status": status}
+
+
+def gmail_message_link(message_id: str) -> str:
+    return f"https://mail.google.com/mail/u/0/#all/{message_id}"
+
+
+async def apply_pipeline_transition(
+    page_id: str, from_status: str, to_status: str,
+    thread_id: str, existing_threads: list, event: str, trigger: str,
+) -> None:
+    """Update a record's status (+ thread id, + Last activity) and append a row to
+    the Pipeline Events log for funnel analytics."""
+    today = _today_et()
+    threads = list(existing_threads or [])
+    if thread_id and thread_id not in threads:
+        threads.append(thread_id)
+
+    await notion.pages.update(page_id=page_id, properties={
+        "Status": {"select": {"name": to_status}},
+        "Last activity": {"date": {"start": today}},
+        "Gmail thread IDs": {"rich_text": [{"text": {"content": ", ".join(threads)[:2000]}}]},
+    })
+    await notion.pages.create(
+        parent={"type": "data_source_id", "data_source_id": PIPELINE_EVENTS_DS_ID},
+        properties={
+            "Event": {"title": [{"text": {"content": f"{from_status or '—'} → {to_status}"}}]},
+            "Timestamp": {"date": {"start": today}},
+            "From Status": {"rich_text": [{"text": {"content": from_status or ""}}]},
+            "To Status": {"rich_text": [{"text": {"content": to_status}}]},
+            "Trigger": {"rich_text": [{"text": {"content": (trigger or "")[:2000]}}]},
+            "Application": {"relation": [{"id": page_id}]},
+        },
+    )
 
 
 async def _update_application(

@@ -32,6 +32,7 @@ ALLOWED_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "5384689298"))
 
 MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096
+PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "20"))
 # Switch models without code changes: set CLAUDE_MODEL in the environment.
 # Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
@@ -370,6 +371,38 @@ async def handle_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await send_reply(update, "\n".join(lines))
 
 
+async def pipeline_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Periodic job: scan recent unprocessed Gmail, classify, and apply pipeline
+    updates. Job-related messages are labeled JobTracker/Processed so they're
+    handled once; non-job mail is left unlabeled (cheap to re-check)."""
+    import tools
+    from pipeline_classifier import prefilter, classify_email
+    from pipeline_ingest import plan_email, apply_plan
+
+    try:
+        candidates = await asyncio.to_thread(tools.gmail_fetch_candidates)
+    except Exception:
+        logger.exception("pipeline_poll: could not fetch Gmail")
+        return
+    if not candidates:
+        return
+
+    records = await tools.gather_pipeline_records()
+    for email in candidates:
+        try:
+            if not prefilter(email)["job_related"]:
+                continue
+            classification = await asyncio.to_thread(classify_email, email)
+            plan = plan_email(email, classification, records)
+            out = await apply_plan(plan, email)
+            for text in (out.get("alert"), out.get("confirm")):
+                if text:
+                    await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text)
+            await asyncio.to_thread(tools.gmail_apply_processed_label, email["id"])
+        except Exception:
+            logger.exception("pipeline_poll: failed on message %s", email.get("id"))
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Catch-all so an unhandled error logs instead of printing a bare traceback."""
     logger.error("Unhandled error", exc_info=context.error)
@@ -382,6 +415,17 @@ def main() -> None:
     app.add_handler(CommandHandler("pipeline", handle_pipeline))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(on_error)
+
+    # Periodic job-pipeline ingestion (needs the python-telegram-bot[job-queue] extra).
+    if app.job_queue is not None:
+        app.job_queue.run_repeating(
+            pipeline_poll, interval=PIPELINE_POLL_MINUTES * 60, first=30,
+        )
+        logger.info("Pipeline poll scheduled every %s min", PIPELINE_POLL_MINUTES)
+    else:
+        logger.warning("JobQueue unavailable — install python-telegram-bot[job-queue] "
+                       "to enable Gmail pipeline ingestion")
+
     logger.info("Daily OS bot polling on model %s... Ctrl+C to stop.", CLAUDE_MODEL)
     app.run_polling(drop_pending_updates=True)
 
