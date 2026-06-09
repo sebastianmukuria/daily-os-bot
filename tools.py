@@ -134,6 +134,68 @@ def gmail_check() -> dict:
     return {"email": profile.get("emailAddress"), "processed_label_id": label_id}
 
 
+def _header(headers: list, name: str) -> str:
+    for h in headers:
+        if h.get("name", "").lower() == name.lower():
+            return h.get("value", "")
+    return ""
+
+
+def gmail_fetch_candidates(
+    query: str = "newer_than:3d -label:JobTracker/Processed",
+    max_results: int = 30,
+) -> list:
+    """Fetch recent, not-yet-processed messages as lightweight dicts
+    {id, thread_id, from, to[list], subject, snippet} for the classifier."""
+    service = _get_gmail_service()
+    listing = service.users().messages().list(
+        userId="me", q=query, maxResults=max_results,
+    ).execute()
+
+    out = []
+    for ref in listing.get("messages", []):
+        msg = service.users().messages().get(
+            userId="me", id=ref["id"], format="metadata",
+            metadataHeaders=["From", "To", "Subject"],
+        ).execute()
+        headers = msg.get("payload", {}).get("headers", [])
+        out.append({
+            "id": msg["id"],
+            "thread_id": msg.get("threadId"),
+            "from": _header(headers, "From"),
+            "to": [a.strip() for a in _header(headers, "To").split(",") if a.strip()],
+            "subject": _header(headers, "Subject"),
+            "snippet": msg.get("snippet", ""),
+        })
+    return out
+
+
+def gmail_apply_processed_label(message_id: str) -> None:
+    service = _get_gmail_service()
+    label_id = gmail_processed_label_id(service)
+    service.users().messages().modify(
+        userId="me", id=message_id, body={"addLabelIds": [label_id]},
+    ).execute()
+
+
+async def gather_pipeline_records() -> list:
+    """All Job Pipeline records as {id, company, role, status, thread_ids[list]} —
+    the input the matcher needs to dedupe incoming emails against existing records."""
+    res = await notion.data_sources.query(data_source_id=JOB_PIPELINE_DS_ID)
+    records = []
+    for page in res.get("results", []):
+        p = page["properties"]
+        threads = _rich_text(p, "Gmail thread IDs") or ""
+        records.append({
+            "id": page["id"],
+            "company": _title(p, "Company"),
+            "role": _rich_text(p, "Role") or "",
+            "status": _select(p, "Status"),
+            "thread_ids": [t.strip() for t in threads.split(",") if t.strip()],
+        })
+    return records
+
+
 TOOLS = [
     {
         "name": "get_tasks",
