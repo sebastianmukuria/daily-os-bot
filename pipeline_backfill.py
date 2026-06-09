@@ -40,6 +40,8 @@ from pipeline_state import (
 
 _ET = pytz.timezone("America/New_York")
 CACHE_PATH = os.path.join(os.path.dirname(__file__), "backfill_cache.json")
+# Keep classification under entry-tier rate limits (raise on a higher API tier).
+BACKFILL_CONCURRENCY = int(os.environ.get("BACKFILL_CONCURRENCY", "2"))
 
 # First event of a group seeds the status from its event type.
 SEED_STATUS = {
@@ -260,26 +262,33 @@ def _save_cache(cache: dict) -> None:
 
 
 async def collect(limit: int, cache: dict) -> list:
+    import anthropic
     import tools
     raw = await asyncio.to_thread(tools.gmail_fetch_all, "newer_than:90d", limit)
     job = [m for m in raw if prefilter(m)["job_related"]]
-    print(f"fetched {len(raw)} messages, {len(job)} job-related; classifying...")
+    cached_n = sum(1 for m in job if m["id"] in cache)
+    print(f"fetched {len(raw)} messages, {len(job)} job-related "
+          f"({cached_n} already cached); classifying...")
 
-    sem = asyncio.Semaphore(6)
+    # Low concurrency + SDK backoff keeps us under entry-tier rate limits; the
+    # cache is saved after EACH classification so an interrupted run resumes cheaply.
+    client = anthropic.Anthropic(max_retries=8)
+    sem = asyncio.Semaphore(BACKFILL_CONCURRENCY)
 
     async def classify(m):
-        if m["id"] in cache:
-            c = cache[m["id"]]
-        else:
+        if m["id"] not in cache:
             async with sem:
-                c = await asyncio.to_thread(classify_email, m)
-            cache[m["id"]] = c
+                cache[m["id"]] = await asyncio.to_thread(classify_email, m, client)
+            _save_cache(cache)
+        c = cache[m["id"]]
         m.update({"company": c["company"], "role": c["role"],
                   "event_type": c["event_type"], "confidence": c["confidence"]})
         return m
 
-    classified = await asyncio.gather(*[classify(m) for m in job])
-    _save_cache(cache)
+    try:
+        classified = await asyncio.gather(*[classify(m) for m in job])
+    finally:
+        _save_cache(cache)
     return [m for m in classified if m["event_type"] != "other"]
 
 
