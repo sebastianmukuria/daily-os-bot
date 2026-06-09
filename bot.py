@@ -43,6 +43,9 @@ client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # In-memory conversation history per chat
 conversation_history: dict[int, list] = {}
+# Interview events we've already reminded / asked to debrief (reset on restart).
+_interview_reminded: set = set()
+_interview_debriefed: set = set()
 
 SYSTEM_PROMPT = """You are Sebastian's personal AI assistant, embedded in his Daily OS Telegram bot. Sebastian has ADHD.
 
@@ -417,6 +420,59 @@ async def pipeline_daily(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("pipeline_daily failed")
 
 
+async def interview_watch(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Hourly: remind ~1h before interviews and prompt a debrief after they end.
+    Debriefs are captured by replying to the prompt (the reply lands a note on the
+    matching pipeline record via the normal handler)."""
+    import tools
+    from pipeline_interviews import is_interview, extract_company, due_reminder, due_debrief
+
+    try:
+        events = await asyncio.to_thread(tools.get_calendar_events_window, 3, 2)
+    except Exception:
+        logger.exception("interview_watch: calendar fetch failed")
+        return
+
+    now = datetime.now(ZoneInfo("America/New_York"))
+    for e in events:
+        if not is_interview(e.get("summary", ""), e.get("attendees", [])):
+            continue
+        try:
+            start = datetime.fromisoformat(e["start"])
+        except (ValueError, KeyError):
+            continue
+        if start.tzinfo is None:
+            continue
+        company = extract_company(e["summary"]) or "the role"
+        eid = e["id"]
+
+        if eid not in _interview_reminded and due_reminder(start, now):
+            _interview_reminded.add(eid)
+            prep = f"~/Projects/Career/Applications/{company}/Prep/"
+            await context.bot.send_message(
+                chat_id=ALLOWED_CHAT_ID,
+                text=f"⏰ Interview soon: {e['summary']} at {start.strftime('%-I:%M %p')}\nPrep: {prep}",
+            )
+            try:  # best-effort link onto the pipeline record
+                await execute_tool("add_application_note",
+                                   {"company": company, "note": f"Interview {start.date().isoformat()}"})
+            except Exception:
+                logger.exception("interview_watch: could not note pipeline record")
+
+        if eid not in _interview_debriefed and due_debrief(start, now):
+            _interview_debriefed.add(eid)
+            await context.bot.send_message(
+                chat_id=ALLOWED_CHAT_ID,
+                text=(f"📝 How did the {company} interview go? Reply with what they asked and "
+                      "what felt weak — I'll save it to the pipeline."),
+            )
+
+    if len(_interview_reminded) > 500:
+        _interview_reminded.clear()
+    if len(_interview_debriefed) > 500:
+        _interview_debriefed.clear()
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Catch-all so an unhandled error logs instead of printing a bare traceback."""
     logger.error("Unhandled error", exc_info=context.error)
@@ -439,7 +495,8 @@ def main() -> None:
             pipeline_daily,
             time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
         )
-        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET",
+        app.job_queue.run_repeating(interview_watch, interval=3600, first=90)
+        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET; interview watch hourly",
                     PIPELINE_POLL_MINUTES, PIPELINE_DIGEST_HOUR)
     else:
         logger.warning("JobQueue unavailable — install python-telegram-bot[job-queue] "
