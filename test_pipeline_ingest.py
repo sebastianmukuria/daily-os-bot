@@ -16,19 +16,19 @@ def test_create_new_application():
 
 
 def test_update_existing_on_rejection():
-    records = [{"id": "1", "company": "Affirm", "role": "Data Analyst I",
+    records = [{"id": "1", "company": "Acme", "role": "Data Analyst I",
                 "status": "Recruiter Screen", "thread_ids": []}]
     p = plan_email({"thread_id": "t1"},
-                   {"company": "Affirm", "role": "Data Analyst I", "event_type": "rejection", "confidence": 0.95},
+                   {"company": "Acme", "role": "Data Analyst I", "event_type": "rejection", "confidence": 0.95},
                    records)
     assert p["action"] == "update" and p["to_status"] == "Rejected", p
 
 
 def test_thread_match_no_forward_is_skip():
-    records = [{"id": "1", "company": "Affirm", "role": "DA",
+    records = [{"id": "1", "company": "Acme", "role": "DA",
                 "status": "Final Round", "thread_ids": ["t1"]}]
     p = plan_email({"thread_id": "t1"},
-                   {"company": "Affirm", "role": "DA", "event_type": "screen_invite", "confidence": 0.95},
+                   {"company": "Acme", "role": "DA", "event_type": "screen_invite", "confidence": 0.95},
                    records)
     assert p["action"] == "skip", p  # can't move Final Round back to Recruiter Screen
 
@@ -56,11 +56,11 @@ def test_other_event_skips():
 
 def test_ambiguous_confirms():
     records = [
-        {"id": "1", "company": "Affirm", "role": "Data Analyst I", "status": "Applied", "thread_ids": []},
-        {"id": "2", "company": "Affirm", "role": "Data Analyst II", "status": "Applied", "thread_ids": []},
+        {"id": "1", "company": "Acme", "role": "Data Analyst I", "status": "Applied", "thread_ids": []},
+        {"id": "2", "company": "Acme", "role": "Data Analyst II", "status": "Applied", "thread_ids": []},
     ]
     p = plan_email({"thread_id": None},
-                   {"company": "Affirm", "role": "", "event_type": "rejection", "confidence": 0.95},
+                   {"company": "Acme", "role": "", "event_type": "rejection", "confidence": 0.95},
                    records)
     assert p["action"] == "confirm" and len(p["candidates"]) == 2, p
 

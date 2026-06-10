@@ -29,7 +29,7 @@ logger = logging.getLogger("daily_os_bot")
 
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-ALLOWED_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "5384689298"))
+ALLOWED_CHAT_ID = int(os.environ["TELEGRAM_CHAT_ID"])  # the only chat the bot serves
 
 MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096

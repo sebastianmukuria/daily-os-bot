@@ -1,158 +1,136 @@
 # Daily OS Bot
 
-A two-way Telegram assistant for a [Notion](https://notion.so)-based personal operating system. Message the bot in plain English and it manages your tasks, ideas, projects, reading list, and Google Calendar — powered by Claude.
+[![Pipeline tests](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml)
 
-Built with ADHD-friendly defaults: tasks ordered by energy level, smallest-next-step framing, and proactive "want me to time-block this?" prompts.
+A personal AI assistant that runs your life ops over Telegram — powered by Claude, backed by [Notion](https://notion.so), Google Calendar, and Gmail. Message it in plain English and it manages tasks, projects, habits, reading lists, and calendar events. In the background, it **automatically tracks your job search by reading your inbox**: every application, interview invite, and rejection becomes a structured, queryable pipeline in Notion — no manual status updates.
 
-## Features
-
-Talk to it naturally over Telegram:
-
-- **Tasks** — "what's on my list?", "add: call dentist, low energy", "done: call dentist"
-- **Ideas** — "idea: build a habit tracker"
-- **Projects** — "what are my active projects?", "start a project: launch my site, check in weekly"
-- **Reading list** — "add Atomic Habits as a book", "what's on my reading list?"
-- **Calendar** — "what's on my calendar this week?", "put dentist on my calendar Tuesday at 2pm"
-- **Anything else** — general questions get a normal Claude answer
-
-## How it works
+Built ADHD-first: tasks ordered by energy level, smallest-next-step framing, a few fixed check-in windows instead of random pings, and proactive "want me to time-block this?" prompts.
 
 ```
-You ─▶ Telegram ─▶ bot.py (polling)
-                      │
-                      ▼
-                 Claude API  ◀──▶  tools.py
-                                      ├─ Notion API (tasks, ideas, projects, reading)
-                                      └─ Google Calendar API
+You:  add: call the dentist, low energy
+Bot:  ✓ Created "Dentist Call 🦷" (Low energy)
+
+You:  took my vitamins
+Bot:  ✓ Take Vitamins 💊 — 4-day streak 🔥
+
+(20 min after a rejection email lands, unprompted:)
+Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 ```
 
-`bot.py` polls Telegram for your messages and runs an **agentic loop**: it sends your
-message to Claude along with a set of tools; if Claude decides to call a tool (e.g.
-`create_task`), the bot runs it, feeds the result back, and repeats until Claude has a
-final answer. `tools.py` defines those tools and talks to Notion and Google Calendar.
+## What it does
 
-## The bigger picture: two halves of a Daily OS
+- **Tasks / Projects / Ideas / Reading list** — full CRUD in Notion via natural language. New tasks are auto-enriched: inferred energy level, type, and a link to the right project.
+- **Habits** — a dedicated tracker with streaks ("took my vitamins" → checked off, streak bumped). Habits are recurring, so they live apart from one-off tasks.
+- **Calendar** — create, edit (never duplicate), and query Google Calendar events; times inferred from context.
+- **Job pipeline (the headline)** — a background job polls Gmail, classifies job-search emails, and drives a per-application state machine in Notion. Instant Telegram alerts on rejections / interviews / offers; low-confidence cases ask instead of guessing.
+- **Web search** — server-side search for "find me details on this event" flows, with results reusable for calendar adds.
+- **Reply-context** — reply to any earlier message (like an automated digest) and the bot reads it, so "add the 2nd one to my calendar" just works.
 
-This repo is the **reactive** half of a larger personal operating system. The full
-setup pairs two complementary pieces that share the same Telegram bot:
+## Architecture
 
-| Layer | Direction | What it does | Where it lives |
-|-------|-----------|--------------|----------------|
-| **This bot** | Inbound (you → bot) | Polls Telegram for your messages and responds, calling Notion / Calendar tools | This repo |
-| **Proactive briefings** | Outbound (bot → you) | Sends scheduled check-ins on a timer — a morning briefing, midday check, end-of-day wrap, and inbox scans | [Claude](https://claude.ai) scheduled tasks, configured separately |
+One Python process, three execution contexts:
 
-The proactive layer *pushes* messages to your Telegram chat on a schedule, while this
-bot *listens* for your replies. They use the same bot token but never collide:
-sending (`sendMessage`) and polling (`getUpdates`) are independent operations.
+```
+                       ┌─────────────────────────────────────────┐
+ You ──▶ Telegram ──▶  │  REACTIVE   message handler + commands  │
+                       │             (Claude agentic tool loop)  │
+                       │                                         │
+ Gmail ◀── poll ────▶  │  PERIODIC   JobQueue: pipeline_poll     │──▶ Notion
+                       │             every 20 min                │──▶ Telegram alerts
+                       │                                         │
+ Calendar ◀─ watch ──▶ │  HOURLY     interview reminders +       │
+                       │             post-interview debriefs     │
+                       └─────────────────────────────────────────┘
+```
 
-> ⚠️ Only one process may **poll** a given bot token at a time. The scheduled tasks
-> only *send*, so they coexist fine with this bot — but don't run two copies of this
-> bot at once.
+The reactive path runs a manual agentic loop: Claude gets ~20 tools (Notion CRUD, Calendar, habits, pipeline, web search); tool calls are executed and fed back until it has a final answer. The periodic paths reuse the exact same domain logic, so manual and automated writes can't diverge.
 
-### The proactive briefings
+## The job pipeline tracker
 
-The outbound layer runs as scheduled tasks in [Claude](https://claude.ai). Each fires
-on a cron schedule, does its work through MCP connectors (Notion, Google Calendar,
-Gmail), and sends the result to Telegram via the Bot API.
+The most engineering-dense part of the repo — an email-driven ETL pipeline with a review-before-write workflow:
 
-| Task | Schedule (ET) | What it does |
-|------|---------------|--------------|
-| **Morning Briefing** | 7:30am | Reads all incomplete tasks, sorts by energy (High → Medium → Low), flags tasks untouched for 3+ days as stale (and marks them in Notion), pulls the day's calendar events, and sends a structured daily plan. |
-| **Midday Check** | 12:30pm | Pulls remaining tasks and afternoon calendar events; sends a short progress nudge — how many done, what's still open. |
-| **EOD Wrap** | 6:00pm | Summarizes what got done vs. what's rolling to tomorrow, pulls tomorrow's calendar, and calls out anything that's been stale for multiple days. |
-| **Gmail → Calendar Sync** | 8:00am & 6:00pm | Searches Gmail for real-world events (flights, hotels, reservations, tickets, invites) and creates calendar events for any with a clear date/time that aren't already there. Only messages you if it actually added something. |
+1. **Two-pass classification.** A deterministic prefilter (ATS sender domains, interview-scheduling recipients, recruiting language) gates a Claude structured-output classifier, so the LLM only sees genuinely job-shaped email. Known false-positives — apartment-rental and OAuth "applications" — are filtered by rule. Validated against a fixtures file of 17 labeled emails that runs in CI.
+2. **Pure state machine.** `(current_status, event_type, confidence) → action`. Forward-only progression (an old email can't move you backward), rejection/offer override, sub-0.85-confidence routes to a human confirm instead of a write. 10 unit tests.
+3. **Per-role matching.** Records are per-role, not per-company. Tiered matching (exact → edge → substring) keeps "Analyst I" and "Analyst II" at the same company separate — and ambiguity returns candidates for a human decision rather than guessing.
+4. **Idempotent ingestion.** A Gmail label is the processing ledger; Notion writes dedupe by thread-id. Every status change appends to a `Pipeline Events` log for funnel analytics (conversion per stage, time-in-stage).
+5. **90-day backfill.** A one-time script reconstructs historical applications: thread-id union-find groups emails per application, chronological replay through the state machine derives final status, real email timestamps stamp the dates. Dry-run by default, prints a reviewable plan, optionally validates against a known-state file, and resumes from an incremental classification cache (rate-limit-safe).
 
-These follow the same ADHD-friendly design rules as the bot: energy-ordered tasks,
-stale-task flagging, and a few fixed check-in windows instead of random notifications.
+## Engineering practices
 
-## Tech stack
-
-- **Python** with [`python-telegram-bot`](https://python-telegram-bot.org/) (async polling)
-- [`anthropic`](https://github.com/anthropics/anthropic-sdk-python) SDK — model: `claude-haiku-4-5` by default (override with the `CLAUDE_MODEL` env var, e.g. `claude-sonnet-4-6`)
-- [`notion-client`](https://github.com/ramnes/notion-sdk-py) for Notion (2025-09-03 data-source API)
-- `google-api-python-client` for Google Calendar
+- **PR-based development** — every change lands through a reviewed pull request (25+ and counting), squash-merged with CI.
+- **Tests where they pay rent** — the pure logic (classifier prefilter, state machine, ingest planner, backfill grouping, interview windows) is unit-tested: 40+ assertions across 5 suites, run by GitHub Actions on relevant PRs.
+- **Dry-run before write** — the seeder and backfill both print a full plan and touch nothing without an explicit `--apply`.
+- **Honest failure reporting** — every tool result is logged (with tracebacks) and surfaced to the user as explicit per-action ✓/✗, never silently swallowed.
 
 ## Setup
 
-### 1. Install dependencies
+Fair warning: this is a personal single-user system, not a packaged product. Expect ~30–60 minutes of API setup.
 
-```bash
-pip3 install -r requirements.txt
-```
+1. **Install:** `pip3 install -r requirements.txt`
+2. **Configure:** `cp .env.example .env` and fill it in (Telegram bot token + chat ID, Anthropic API key, Notion integration token). See the comments in [.env.example](.env.example).
+3. **Notion:** create your databases (Tasks, Projects, Ideas, Reading, Habits, Job Pipeline, Pipeline Events) and share each with your integration, then set the data-source IDs at the top of [tools.py](tools.py). Schemas are documented inline.
+4. **Google:** create a Cloud project, enable the Calendar + Gmail APIs, download OAuth desktop credentials as `credentials.json`, then run `python3 auth_google.py` (writes `token.json`; prints a `GOOGLE_TOKEN_JSON` value for cloud deploys).
+5. **Run:** `python3 bot.py`
 
-### 2. Configure environment variables
+### Deploying (Railway / Render)
 
-```bash
-cp .env.example .env
-```
+The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's dashboard — including `GOOGLE_TOKEN_JSON`, because ephemeral filesystems lose `token.json` on redeploy. Merges to `main` auto-deploy if you connect the repo.
 
-Then fill in `.env`:
+> ⚠️ Run exactly **one** instance per Telegram bot token — two pollers conflict.
 
-| Variable | Where to get it |
-|----------|-----------------|
-| `TELEGRAM_TOKEN` | [@BotFather](https://t.me/BotFather) on Telegram |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID (the bot only responds to this ID) |
-| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| `NOTION_TOKEN` | [notion.so/my-integrations](https://www.notion.so/my-integrations) |
+### Configuration
 
-After creating the Notion integration, **share each database with it**: open the
-database → `•••` → Connections → add your integration.
-
-### 3. Authenticate Google Calendar
-
-```bash
-python3 auth_google.py
-```
-
-Follow the instructions printed by the script (you'll need a `credentials.json` from
-Google Cloud Console). It writes `token.json` for local use and prints a
-`GOOGLE_TOKEN_JSON` value for cloud deployment.
-
-### 4. Run it
-
-```bash
-python3 bot.py
-```
-
-Message your bot on Telegram. Send `/start` for a quick command list.
-
-## Deployment (Railway / Render)
-
-The included `Procfile` runs the bot as a worker process. Set every variable from
-`.env` in your host's dashboard — **including `GOOGLE_TOKEN_JSON`**, because these
-hosts have an ephemeral filesystem and `token.json` won't survive a redeploy.
-
-> ⚠️ Only run **one** instance of the bot per Telegram token. Running it locally
-> and in the cloud at the same time causes a polling conflict.
+| Variable | Purpose | Default |
+|---|---|---|
+| `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID` | Bot identity; the single chat it serves | required |
+| `ANTHROPIC_API_KEY` | Claude API | required |
+| `NOTION_TOKEN` | Notion integration | required |
+| `GOOGLE_TOKEN_JSON` | OAuth token for cloud deploys | falls back to `token.json` |
+| `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
+| `CLASSIFIER_MODEL` | Email classifier model | `claude-sonnet-4-6` |
+| `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
+| `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
 
 ## Project structure
 
 | File | Purpose |
-|------|---------|
-| `bot.py` | Telegram polling, the Claude agentic loop, message formatting |
-| `tools.py` | Tool definitions + Notion and Google Calendar implementations |
-| `auth_google.py` | One-time Google OAuth setup |
-| `requirements.txt` | Python dependencies |
-| `Procfile` | Process definition for Railway/Render |
-| `.env.example` | Template for required environment variables |
+|---|---|
+| `bot.py` | Telegram handlers, Claude agentic loop, JobQueue scheduling, formatting |
+| `tools.py` | Tool schemas + implementations: Notion (tasks/projects/ideas/reading/habits/pipeline), Calendar, Gmail |
+| `pipeline_classifier.py` | Prefilter + LLM email classification (structured output) |
+| `pipeline_state.py` | Pure state machine + per-role matching |
+| `pipeline_ingest.py` | Plan + apply: classified email → Notion writes / Telegram alerts |
+| `pipeline_interviews.py` | Interview detection, reminder + debrief windows (pure) |
+| `pipeline_backfill.py` | One-time 90-day historical reconstruction (dry-run first) |
+| `seed.py` | Idempotent bulk-seeder for projects/tasks/ideas from YAML |
+| `test_*.py`, `fixtures/` | Unit tests + labeled email fixtures (run in CI) |
+| `auth_google.py` | One-time Google OAuth (Calendar + Gmail scopes) |
+
+## The proactive layer
+
+This bot is the *reactive* half of a larger setup. A separate scheduled-agent layer (Claude scheduled tasks) pushes a morning briefing (energy-ordered tasks + habits due), a midday check, an end-of-day wrap, and Gmail→Calendar sweeps to the same Telegram chat. They share the bot token safely: senders and pollers don't conflict. The bot's reply-context feature closes the loop — reply to any briefing to act on it.
+
+## Limitations & roadmap
+
+- **Single-user by design** — one chat ID, one Notion workspace, no multi-tenancy.
+- Notion database IDs are constants in `tools.py`; provisioning them is manual (a setup script is a welcome contribution).
+- Conversation memory is in-process (last 20 messages) — restarts forget context.
+- Pipeline analytics (conversion rates, time-in-stage from `Pipeline Events`) are logged but not yet reported.
 
 ## Development workflow
 
-Changes are made on a branch and merged via pull request — never committed straight
-to `main`:
-
 ```bash
-git checkout -b descriptive-branch-name   # start a branch
-# ...make changes...
-git add -A
-git commit -m "Describe what changed"
+git checkout -b descriptive-branch-name
+# ...make changes, run the test suites...
+git add -A && git commit -m "describe the change"
 git push -u origin descriptive-branch-name
-gh pr create                              # open a pull request
-# review, then merge on GitHub (or: gh pr merge)
+gh pr create   # CI runs the pipeline tests; review, then squash-merge
 ```
 
 ## Security
 
-Secrets live in `.env` and `token.json` / `credentials.json`, all of which are
-gitignored and must **never** be committed. The bot only responds to the single
-`TELEGRAM_CHAT_ID` you configure.
+Secrets live in `.env`, `token.json`, and `credentials.json` — all gitignored, never committed. Personal data files (`seed_data.yaml`, `backfill_cache.json`, `backfill_targets.json`) are gitignored too. The bot answers only the configured `TELEGRAM_CHAT_ID`, Gmail access is read-plus-label only (it never archives, deletes, or sends mail), and every fixture in this repo is synthetic.
+
+## License
+
+[MIT](LICENSE)

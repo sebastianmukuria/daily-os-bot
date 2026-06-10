@@ -103,7 +103,7 @@ async def apply_plan(plan: dict, email: dict) -> dict:
             f"Looks like: {who} ({plan.get('event', '?')}, conf {plan.get('confidence')})\n"
             f"{plan['reason']}.\n{link}\n\n"
             "Reply to this message telling me what to do (e.g. 'log it as applied' "
-            "or 'move Affirm Analyst I to interviewing')."
+            "or 'move Acme Analyst I to interviewing')."
         )}
 
     return {"alert": None, "confirm": None}  # skip

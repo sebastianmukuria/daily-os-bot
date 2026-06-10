@@ -53,21 +53,21 @@ def test_should_ghost():
 
 
 def test_match_by_thread():
-    records = [{"id": "1", "company": "Affirm", "role": "Data Analyst I", "thread_ids": ["t1"]}]
-    m = match_application("Affirm", "Data Analyst I", "t1", records)
+    records = [{"id": "1", "company": "Acme", "role": "Data Analyst I", "thread_ids": ["t1"]}]
+    m = match_application("Acme", "Data Analyst I", "t1", records)
     assert m["by"] == "thread" and m["match"]["id"] == "1"
 
 
 def test_match_per_role_disambiguation():
     records = [
-        {"id": "1", "company": "Affirm", "role": "Data Analyst I", "thread_ids": []},
-        {"id": "2", "company": "Affirm", "role": "Data Analyst II", "thread_ids": []},
+        {"id": "1", "company": "Acme", "role": "Data Analyst I", "thread_ids": []},
+        {"id": "2", "company": "Acme", "role": "Data Analyst II", "thread_ids": []},
     ]
     # "Analyst I" must NOT also match "Analyst II"
-    m = match_application("Affirm", "Analyst I", None, records)
+    m = match_application("Acme", "Analyst I", None, records)
     assert m["by"] == "company_role" and m["match"]["id"] == "1", m
     # no role given -> ambiguous, return both
-    m2 = match_application("Affirm", None, None, records)
+    m2 = match_application("Acme", None, None, records)
     assert m2["by"] == "ambiguous" and len(m2["candidates"]) == 2, m2
 
 
