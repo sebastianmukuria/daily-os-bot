@@ -14,9 +14,12 @@ Run the fixtures eval: `python3 test_classifier.py`
 import os
 import anthropic
 
-# Per architecture decision D6: classification is reasoning-heavy and unattended,
-# so it runs on Sonnet even though chat runs on Haiku.
-CLASSIFIER_MODEL = os.environ.get("CLASSIFIER_MODEL", "claude-sonnet-4-6")
+# Classification runs unattended at volume (the 20-min poller + the one-time
+# backfill). On an entry API tier that volume saturated the Sonnet rate limit and
+# starved other Sonnet work (e.g. the scheduled briefings), so it runs on Haiku —
+# a separate, more generous pool, and verified equally accurate on the fixtures.
+# Override with CLASSIFIER_MODEL=claude-sonnet-4-6 on a higher tier if desired.
+CLASSIFIER_MODEL = os.environ.get("CLASSIFIER_MODEL", "claude-haiku-4-5")
 
 EVENT_TYPES = [
     "applied", "screen_invite", "interview_scheduled", "reschedule",
