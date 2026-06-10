@@ -33,7 +33,7 @@ ALLOWED_CHAT_ID = int(os.environ["TELEGRAM_CHAT_ID"])  # the only chat the bot s
 
 MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096
-PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "60"))
+PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "20"))
 PIPELINE_DIGEST_HOUR = int(os.environ.get("PIPELINE_DIGEST_HOUR", "8"))  # ET
 # Switch models without code changes: set CLAUDE_MODEL in the environment.
 # Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
