@@ -1,6 +1,9 @@
 """
 Unit tests for the backfill's pure logic (cluster / replay / decide) on synthetic
-events that mirror the known target state. No Gmail/Notion/LLM.
+events. No Gmail/Notion/LLM. The fixtures exercise the hazardous shapes:
+role-name variants across threads, empty-role events, and distinct roles at one
+company that overlap as substrings ("Data Analyst I"/"II" share a prefix;
+"Sr Growth Analyst" fully contains "Growth Analyst" as a suffix).
 
   python3 test_pipeline_backfill.py   # standalone
   pytest test_pipeline_backfill.py    # in CI
@@ -26,15 +29,15 @@ def _ev(eid, thread, company, role, et, date, conf=0.95):
 
 
 EVENTS = [
-    _ev("1", "A1", "Affirm", "Data Analyst I", "applied", "2026-05-20"),
-    _ev("2", "A1b", "Affirm", "Analyst I", "interview_scheduled", "2026-06-04"),   # role variant, new thread
-    _ev("3", "A2", "Affirm", "Data Analyst II", "applied", "2026-05-21"),
-    _ev("4", "A2", "Affirm", "", "rejection", "2026-06-08"),                        # empty role, same thread
-    _ev("5", "S1", "SpaceX", "Starlink Growth BA", "applied", "2026-05-15"),
-    _ev("6", "S1", "SpaceX", "Starlink Growth BA", "rejection", "2026-05-28"),
-    _ev("7", "S2", "SpaceX", "Starlink Growth Sr BA", "applied", "2026-05-16"),
-    _ev("8", "S2", "SpaceX", "Starlink Growth Sr BA", "rejection", "2026-05-29"),
-    _ev("9", "N1", "Netflix", "Data Analyst Production Finance", "applied", "2026-06-05"),
+    _ev("1", "A1", "Acme", "Data Analyst I", "applied", "2026-05-20"),
+    _ev("2", "A1b", "Acme", "Analyst I", "interview_scheduled", "2026-06-04"),   # role variant, new thread
+    _ev("3", "A2", "Acme", "Data Analyst II", "applied", "2026-05-21"),
+    _ev("4", "A2", "Acme", "", "rejection", "2026-06-08"),                        # empty role, same thread
+    _ev("5", "S1", "Lambda", "Growth Analyst", "applied", "2026-05-15"),
+    _ev("6", "S1", "Lambda", "Growth Analyst", "rejection", "2026-05-28"),
+    _ev("7", "S2", "Lambda", "Sr Growth Analyst", "applied", "2026-05-16"),
+    _ev("8", "S2", "Lambda", "Sr Growth Analyst", "rejection", "2026-05-29"),
+    _ev("9", "N1", "Streamly", "Data Analyst, Finance", "applied", "2026-06-05"),
 ]
 
 
@@ -45,50 +48,50 @@ def _recons():
 
 def test_distinct_roles_stay_split():
     groups, _ = _recons()
-    affirm = [g for g in groups if g["company_norm"] == "affirm"]
-    spacex = [g for g in groups if g["company_norm"] == "spacex"]
-    assert len(affirm) == 2, [g["role"] for g in affirm]   # Analyst I and II, never merged
-    assert len(spacex) == 2, [g["role"] for g in spacex]   # BA and Sr BA
-    assert len(groups) == 5, len(groups)                   # + Netflix
+    acme = [g for g in groups if g["company_norm"] == "acme"]
+    lam = [g for g in groups if g["company_norm"] == "lambda"]
+    assert len(acme) == 2, [g["role"] for g in acme]   # Analyst I and II, never merged
+    assert len(lam) == 2, [g["role"] for g in lam]     # Growth Analyst and Sr Growth Analyst
+    assert len(groups) == 5, len(groups)               # + Streamly
 
 
 def test_reconstructed_statuses():
     _, recons = _recons()
     by = {(norm_company(r["company"]), r["role"]): r["status"] for r in recons}
-    assert by[("affirm", "Data Analyst I")] == "Interviewing", by
-    assert by[("affirm", "Data Analyst II")] == "Rejected", by
-    assert by[("spacex", "Starlink Growth BA")] == "Rejected", by
-    assert by[("spacex", "Starlink Growth Sr BA")] == "Rejected", by
-    assert by[("netflix", "Data Analyst Production Finance")] == "Applied", by
+    assert by[("acme", "Data Analyst I")] == "Interviewing", by
+    assert by[("acme", "Data Analyst II")] == "Rejected", by
+    assert by[("lambda", "Growth Analyst")] == "Rejected", by
+    assert by[("lambda", "Sr Growth Analyst")] == "Rejected", by
+    assert by[("streamly", "Data Analyst, Finance")] == "Applied", by
 
 
 def test_thread_merge_keeps_one_record():
-    # The empty-role Affirm II rejection (same thread as its 'applied') must merge,
-    # not spawn a 3rd Affirm group.
+    # The empty-role rejection (same thread as its 'applied') must merge into the
+    # Analyst II group, not spawn a 3rd Acme group.
     groups, _ = _recons()
-    affirm_ii = next(g for g in groups if g["role"] == "Data Analyst II")
-    assert len(affirm_ii["events"]) == 2 and "A2" in affirm_ii["thread_ids"]
+    analyst_ii = next(g for g in groups if g["role"] == "Data Analyst II")
+    assert len(analyst_ii["events"]) == 2 and "A2" in analyst_ii["thread_ids"]
 
 
 def test_canonical_role_is_longest():
     groups, _ = _recons()
-    affirm_i = next(g for g in groups if "Analyst I" in g["role"] and "II" not in g["role"])
-    assert affirm_i["role"] == "Data Analyst I"  # not the shorter 'Analyst I' variant
+    analyst_i = next(g for g in groups if "Analyst I" in g["role"] and "II" not in g["role"])
+    assert analyst_i["role"] == "Data Analyst I"  # not the shorter 'Analyst I' variant
 
 
 def test_decide_create_update_skip():
     _, recons = _recons()
-    affirm_ii = next(r for r in recons if r["role"] == "Data Analyst II")
+    analyst_ii = next(r for r in recons if r["role"] == "Data Analyst II")
     # no existing -> create
-    assert decide_action(affirm_ii, [])["action"] == "create"
+    assert decide_action(analyst_ii, [])["action"] == "create"
     # existing at earlier stage -> update (Applied -> Rejected)
-    existing = [{"id": "p1", "company": "Affirm", "role": "Data Analyst II",
+    existing = [{"id": "p1", "company": "Acme", "role": "Data Analyst II",
                  "status": "Applied", "thread_ids": []}]
-    assert decide_action(affirm_ii, existing)["action"] == "update"
+    assert decide_action(analyst_ii, existing)["action"] == "update"
     # existing already Rejected -> skip
-    existing2 = [{"id": "p1", "company": "Affirm", "role": "Data Analyst II",
+    existing2 = [{"id": "p1", "company": "Acme", "role": "Data Analyst II",
                   "status": "Rejected", "thread_ids": []}]
-    assert decide_action(affirm_ii, existing2)["action"] == "skip"
+    assert decide_action(analyst_ii, existing2)["action"] == "skip"
 
 
 def _run():

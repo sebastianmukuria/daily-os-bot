@@ -55,19 +55,21 @@ HARD_FLAGS = {
 }
 ACTIVE_STATUSES = {"Recruiter Screen", "Interviewing", "Final Round", "Offer"}
 
-# Known current state to self-validate the reconstruction against (spec §7).
-KNOWN_TARGET_STATE = [
-    ("affirm", "Data Analyst I", "active"),
-    ("affirm", "Data Analyst II", "Rejected"),
-    ("spacex", "Starlink Growth BA", "Rejected"),
-    ("spacex", "Starlink Growth Sr BA", "Rejected"),
-    ("capital group", "Data Product Analyst", "Rejected"),
-    ("netflix", "Data Analyst Production Finance", "Applied"),
-    ("salesforce", "Data Analytics Senior Analyst", "Applied"),
-    ("disney", "Inventory Analytics", "Rejected"),
-    ("tiktok", "", "Applied"),
-    ("google", "EA AI Safety", "Rejected"),
-]
+# Optional self-validation list (personal data — gitignored). If
+# backfill_targets.json exists next to this script, the dry-run diffs the
+# reconstruction against it. Format: [["company_substr", "role_substr",
+# "ExpectedStatus_or_active"], ...]
+TARGETS_PATH = os.path.join(os.path.dirname(__file__), "backfill_targets.json")
+
+
+def _load_targets() -> list:
+    if os.path.exists(TARGETS_PATH):
+        with open(TARGETS_PATH) as f:
+            return [tuple(t) for t in json.load(f)]
+    return []
+
+
+KNOWN_TARGET_STATE = _load_targets()
 
 _LEGAL = re.compile(r"\b(inc|llc|ltd|corp|corporation|co)\b\.?", re.I)
 _NOISE = re.compile(r"\b(via linkedin|careers|talent|recruiting|team|jobs)\b", re.I)
@@ -302,9 +304,12 @@ def print_plan(decisions: list, recons: list) -> None:
         for t in r["timeline"]:
             print(f"        {t['date']}  {t['event']:18} conf {t['conf']}  {t['subject'][:46]}")
     print(f"\ncounts: {counts}")
-    print("\n=== vs KNOWN TARGET STATE ===")
-    for line in diff_against_target(recons):
-        print(line)
+    if KNOWN_TARGET_STATE:
+        print("\n=== vs KNOWN TARGET STATE ===")
+        for line in diff_against_target(recons):
+            print(line)
+    else:
+        print("\n(no backfill_targets.json — skipping target validation)")
 
 
 async def main(apply: bool, include_review: bool, limit: int) -> None:

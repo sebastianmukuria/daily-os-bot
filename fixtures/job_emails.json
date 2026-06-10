@@ -1,70 +1,70 @@
 [
   {
-    "email": {"from": "no-reply@us.greenhouse-mail.io", "to": ["sebastianmukuria@gmail.com"], "subject": "We've received your application for Data Analyst at Acme", "snippet": "Thanks for applying to the Data Analyst role at Acme. We've received your application and will review it."},
+    "email": {"from": "no-reply@us.greenhouse-mail.io", "to": ["candidate@example.com"], "subject": "We've received your application for Data Analyst at Acme", "snippet": "Thanks for applying to the Data Analyst role at Acme. We've received your application and will review it."},
     "expect": {"job_related": true, "event_type": "applied"}
   },
   {
-    "email": {"from": "salesforce@myworkday.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Thank you for applying to Salesforce", "snippet": "Your application for Data Analytics Senior Analyst has been received."},
+    "email": {"from": "examplecorp@myworkday.com", "to": ["candidate@example.com"], "subject": "Thank you for applying to ExampleCorp", "snippet": "Your application for Senior Data Analyst has been received."},
     "expect": {"job_related": true, "event_type": "applied"}
   },
   {
-    "email": {"from": "careers@jobs.netflix.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Your application to Netflix", "snippet": "We have received your application for Data Analyst, Production Finance."},
+    "email": {"from": "careers@jobs.netflix.com", "to": ["candidate@example.com"], "subject": "Your application to Netflix", "snippet": "We have received your application for Data Analyst."},
     "expect": {"job_related": true, "event_type": "applied"}
   },
   {
-    "email": {"from": "jobs-noreply@linkedin.com", "to": ["sebastianmukuria@gmail.com"], "subject": "your application was sent to TikTok", "snippet": "Your application was sent to TikTok for the Data Analyst role."},
+    "email": {"from": "jobs-noreply@linkedin.com", "to": ["candidate@example.com"], "subject": "your application was sent to ExampleCo", "snippet": "Your application was sent to ExampleCo for the Data Analyst role."},
     "expect": {"job_related": true, "event_type": "applied"}
   },
   {
-    "email": {"from": "no-reply@affirm.com", "to": ["sebastianmukuria@gmail.com"], "subject": "We received your application", "snippet": "Thanks for applying to Affirm for the Data Analyst I position."},
+    "email": {"from": "no-reply@affirm.com", "to": ["candidate@example.com"], "subject": "We received your application", "snippet": "Thanks for applying to Affirm for the Data Analyst position."},
     "expect": {"job_related": true, "event_type": "applied"}
   },
   {
-    "email": {"from": "no-reply-recruiting@spacex.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Your SpaceX application", "snippet": "After careful consideration we unfortunately will not be moving forward with your application for Starlink Growth BA."},
+    "email": {"from": "no-reply-recruiting@spacex.com", "to": ["candidate@example.com"], "subject": "Your SpaceX application", "snippet": "After careful consideration we unfortunately will not be moving forward with your application for the Business Analyst role."},
     "expect": {"job_related": true, "event_type": "rejection"}
   },
   {
-    "email": {"from": "capgroup@myworkday.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Update on your Capital Group application", "snippet": "We have decided to not move forward with your candidacy for Data Product Analyst."},
+    "email": {"from": "examplecorp@myworkday.com", "to": ["candidate@example.com"], "subject": "Update on your ExampleCorp application", "snippet": "We have decided to not move forward with your candidacy for Data Product Analyst."},
     "expect": {"job_related": true, "event_type": "rejection"}
   },
   {
-    "email": {"from": "no-reply@disney.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Thank You for Your Interest", "snippet": "Unfortunately we will not be moving forward with your candidacy for Inventory Analytics."},
+    "email": {"from": "no-reply@examplestudios.com", "to": ["candidate@example.com"], "subject": "Thank You for Your Interest", "snippet": "Unfortunately we will not be moving forward with your candidacy for the Analytics Analyst position."},
     "expect": {"job_related": true, "event_type": "rejection"}
   },
   {
-    "email": {"from": "aaron.elkind@affirm.com", "to": ["sebastianmukuria@gmail.com", "schedules@interviewplanner.com"], "subject": "Next steps — Data Analyst I", "snippet": "Great speaking today. Let's set up the next round; scheduling link below."},
+    "email": {"from": "jordan.lee@acmecorp.com", "to": ["candidate@example.com", "schedules@interviewplanner.com"], "subject": "Next steps — Data Analyst", "snippet": "Great speaking today. Let's set up the next round; scheduling link below."},
     "expect": {"job_related": true, "event_type": "interview_scheduled"}
   },
   {
-    "email": {"from": "riyadhar@xwf.google.com", "to": ["sebastianmukuria@gmail.com", "notes@metaview.ai"], "subject": "Google EA interview", "snippet": "Confirming your interview for the EA AI Safety role."},
+    "email": {"from": "recruiting@examplecorp.com", "to": ["candidate@example.com", "notes@metaview.ai"], "subject": "ExampleCorp interview", "snippet": "Confirming your interview for the Data Analyst role."},
     "expect": {"job_related": true, "event_type": "interview_scheduled"}
   },
   {
-    "email": {"from": "calendar-notification@google.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Interview: Affirm x Sebastian", "snippet": "You have been invited to the following event. Interview: Affirm x Sebastian, Thursday 2pm."},
+    "email": {"from": "calendar-notification@google.com", "to": ["candidate@example.com"], "subject": "Interview: AcmeCorp x Candidate", "snippet": "You have been invited to the following event. Interview: AcmeCorp x Candidate, Thursday 2pm."},
     "expect": {"job_related": true, "event_type": "interview_scheduled"}
   },
   {
-    "email": {"from": "recruiter@bigco.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Offer — Data Analyst at BigCo", "snippet": "We are pleased to offer you the Data Analyst position. Details attached."},
+    "email": {"from": "recruiter@bigco.com", "to": ["candidate@example.com"], "subject": "Offer — Data Analyst at BigCo", "snippet": "We are pleased to offer you the Data Analyst position. Details attached."},
     "expect": {"job_related": true, "event_type": "offer"}
   },
   {
-    "email": {"from": "jane@recruitfirm.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Interesting opportunity for you", "snippet": "I'm a recruiter reaching out about a Data Analyst opening that fits your background."},
+    "email": {"from": "jane@recruitfirm.com", "to": ["candidate@example.com"], "subject": "Interesting opportunity for you", "snippet": "I'm a recruiter reaching out about a Data Analyst opening that fits your background."},
     "expect": {"job_related": true, "event_type": "recruiter_inbound"}
   },
   {
-    "email": {"from": "no-reply@entrata.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Application Payment Confirmation", "snippet": "Your rental application payment for The Apartments at Navy Yard has been received."},
+    "email": {"from": "no-reply@entrata.com", "to": ["candidate@example.com"], "subject": "Application Payment Confirmation", "snippet": "Your rental application payment for Example Apartments has been received."},
     "expect": {"job_related": false, "event_type": "other"}
   },
   {
-    "email": {"from": "noreply@github.com", "to": ["sebastianmukuria@gmail.com"], "subject": "A third-party OAuth application has been added to your account", "snippet": "The OAuth application Vercel was recently authorized to access your account."},
+    "email": {"from": "noreply@github.com", "to": ["candidate@example.com"], "subject": "A third-party OAuth application has been added to your account", "snippet": "The OAuth application Vercel was recently authorized to access your account."},
     "expect": {"job_related": false, "event_type": "other"}
   },
   {
-    "email": {"from": "news@substack.com", "to": ["sebastianmukuria@gmail.com"], "subject": "This week in data", "snippet": "The latest on dbt, warehouses, and analytics engineering."},
+    "email": {"from": "news@substack.com", "to": ["candidate@example.com"], "subject": "This week in data", "snippet": "The latest on dbt, warehouses, and analytics engineering."},
     "expect": {"job_related": false, "event_type": "other"}
   },
   {
-    "email": {"from": "billing@netflix.com", "to": ["sebastianmukuria@gmail.com"], "subject": "Your receipt from Netflix", "snippet": "Your monthly subscription payment was processed."},
+    "email": {"from": "billing@netflix.com", "to": ["candidate@example.com"], "subject": "Your receipt from Netflix", "snippet": "Your monthly subscription payment was processed."},
     "expect": {"job_related": false, "event_type": "other"}
   }
 ]
