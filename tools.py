@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -856,14 +857,26 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     return {"tasks": tasks, "count": len(tasks)}
 
 
+def _fold(s: str) -> str:
+    """Lowercase and strip accents so a plain 'resume' query matches 'Résumé'."""
+    s = unicodedata.normalize("NFKD", s or "")
+    return "".join(c for c in s if not unicodedata.combining(c)).casefold().strip()
+
+
+async def _find_by_title(data_source_id: str, title_prop: str, query: str) -> list:
+    """Accent- and case-insensitive title search. Notion's `contains` is
+    accent-sensitive (so 'resume' misses 'Résumé'), so we fetch and match in
+    Python — preferring an exact folded-title match, else any folded substring."""
+    res = await notion.data_sources.query(data_source_id=data_source_id, page_size=100)
+    q = _fold(query)
+    pages = res.get("results", [])
+    exact = [p for p in pages if _fold(_title(p["properties"], title_prop)) == q]
+    return exact or [p for p in pages if q in _fold(_title(p["properties"], title_prop))]
+
+
 async def _find_project(name: str) -> dict | None:
-    """Find the first project whose Name contains `name`, or None."""
-    res = await notion.data_sources.query(
-        data_source_id=PROJECTS_DS_ID,
-        filter={"property": "Name", "title": {"contains": name}},
-    )
-    results = res.get("results", [])
-    return results[0] if results else None
+    matches = await _find_by_title(PROJECTS_DS_ID, "Name", name)
+    return matches[0] if matches else None
 
 
 async def get_project_names() -> list:
@@ -914,13 +927,9 @@ async def _create_task(
 
 
 async def _find_task(task_name: str) -> dict | None:
-    """Find the first task whose title contains task_name, or None."""
-    result = await notion.data_sources.query(
-        data_source_id=TASKS_DS_ID,
-        filter={"property": "Task", "title": {"contains": task_name}},
-    )
-    results = result.get("results", [])
-    return results[0] if results else None
+    """Find a task by title — accent- and case-insensitive ('resume' finds 'Résumé')."""
+    matches = await _find_by_title(TASKS_DS_ID, "Task", task_name)
+    return matches[0] if matches else None
 
 
 async def _complete_task(task_name: str) -> dict:
@@ -1204,12 +1213,8 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
 # --- Habits ---
 
 async def _find_habit(name: str) -> dict | None:
-    res = await notion.data_sources.query(
-        data_source_id=HABITS_DS_ID,
-        filter={"property": "Name", "title": {"contains": name}},
-    )
-    results = res.get("results", [])
-    return results[0] if results else None
+    matches = await _find_by_title(HABITS_DS_ID, "Name", name)
+    return matches[0] if matches else None
 
 
 async def _get_habits() -> dict:
