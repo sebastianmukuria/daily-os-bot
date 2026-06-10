@@ -87,7 +87,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `NOTION_TOKEN` | Notion integration | required |
 | `GOOGLE_TOKEN_JSON` | OAuth token for cloud deploys | falls back to `token.json` |
 | `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
-| `CLASSIFIER_MODEL` | Email classifier model | `claude-sonnet-4-6` |
+| `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
 | `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
 | `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
 
