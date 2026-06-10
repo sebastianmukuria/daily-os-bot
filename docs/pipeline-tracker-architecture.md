@@ -50,9 +50,10 @@ reading messages **and** applying the `JobTracker/Processed` label; does not all
 Requires re-running `auth_google.py` to re-consent, then updating `GOOGLE_TOKEN_JSON` on
 Railway. Guardrail from spec §8: we only ever *add a label* — never archive/delete.
 
-### D3 — Polling cadence → **20 min, configurable via env** ✅ recommend
-`PIPELINE_POLL_MINUTES` (default 20). Alerts land within ~20 min — plenty for a job
-search, and gentle on Gmail quota.
+### D3 — Polling cadence → **configurable via env** ✅ recommend
+`PIPELINE_POLL_MINUTES` (default 60). Alerts land within the hour — plenty for a job
+search, gentle on Gmail quota, and light on API rate limits. (Originally 20 min;
+lowered to hourly after entry-tier rate-limit pressure.)
 
 ### D4 — Idempotency → **the Gmail label IS the ledger** ✅ recommend
 Each poll queries job-candidate messages **without** `JobTracker/Processed`, handles them,
