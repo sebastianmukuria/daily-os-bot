@@ -13,7 +13,7 @@ Bot:  ✓ Created "Dentist Call 🦷" (Low energy)
 You:  took my vitamins
 Bot:  ✓ Take Vitamins 💊 — 4-day streak 🔥
 
-(within the hour after a rejection email lands, unprompted:)
+(20 min after a rejection email lands, unprompted:)
 Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 ```
 
@@ -36,7 +36,7 @@ One Python process, three execution contexts:
                        │             (Claude agentic tool loop)  │
                        │                                         │
  Gmail ◀── poll ────▶  │  PERIODIC   JobQueue: pipeline_poll     │──▶ Notion
-                       │             hourly                      │──▶ Telegram alerts
+                       │             every 20 min                │──▶ Telegram alerts
                        │                                         │
  Calendar ◀─ watch ──▶ │  HOURLY     interview reminders +       │
                        │             post-interview debriefs     │
@@ -88,7 +88,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `GOOGLE_TOKEN_JSON` | OAuth token for cloud deploys | falls back to `token.json` |
 | `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
 | `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
-| `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `60` |
+| `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
 | `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
 
 ## Project structure
