@@ -40,8 +40,16 @@ KNOWN_JOB_SENDERS = {
 INTERVIEW_RECIPIENT_DOMAINS = {
     "interviewplanner.com", "metaview.ai", "goodtime.io", "calendly.com",
 }
+# The prefilter should be GENEROUS — a false negative drops a real application
+# silently, while a false positive just gets correctly rejected by the LLM. So
+# cover the common application-confirmation phrasings broadly.
 RECRUITING_PHRASES = [
-    "received your application", "application was sent", "thank you for applying",
+    # application confirmations
+    "applying to", "for applying", "thanks for applying", "thank you for applying",
+    "your application", "received your application", "received your resume",
+    "we received your", "we've received your", "application received",
+    "application was sent",
+    # progression / outcome
     "moving forward", "not move forward", "pleased to offer", "would like to offer",
     "extend an offer", "next steps", "candidacy", "recruiter", "recruiting",
     "schedule a", "interview",
