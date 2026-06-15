@@ -19,13 +19,9 @@ Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 
 ## Demo
 
-<p align="center">
-  <img src="docs/screenshots/auto-logged-applications.png" width="32%" alt="Applications auto-logged from Gmail" />
-  <img src="docs/screenshots/job-pipeline-digest.png" width="32%" alt="Daily job-pipeline digest and status alerts" />
-  <img src="docs/screenshots/morning-briefing.png" width="32%" alt="Energy-sorted ADHD morning briefing" />
-</p>
+![Daily OS Bot demo — applications auto-logged from Gmail, a daily job-pipeline digest with one-tap corrections, and an energy-sorted morning briefing](docs/demo.svg)
 
-*Left → right: applications auto-detected and logged straight from the inbox; the daily pipeline digest with unprompted rejection/interview alerts; the proactive morning briefing with tasks ordered by energy. Running in production on my own job search.*
+*Left → right: applications auto-detected and logged from the inbox (zero manual updates); the daily pipeline funnel digest, where any call can be corrected in one reply; and the proactive ADHD morning briefing with tasks ordered by energy. Recreated from real production output, running on my own job search.*
 
 ## What this demonstrates
 
