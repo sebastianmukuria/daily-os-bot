@@ -21,7 +21,7 @@ Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 
 ![Daily OS Bot demo — applications auto-logged from Gmail, a daily job-pipeline digest with one-tap corrections, and an energy-sorted morning briefing](docs/demo.svg)
 
-*Left → right: applications auto-detected and logged from the inbox (zero manual updates); the daily pipeline funnel digest, where any call can be corrected in one reply; and the proactive ADHD morning briefing with tasks ordered by energy. Recreated from real production output, running on my own job search.*
+*Left → right: applications auto-detected and logged from the inbox (zero manual updates); a one-line request turned into an auto-enriched task plus a protected calendar time-block; and the proactive ADHD morning briefing with tasks ordered by energy. Recreated from real production output, running on my own job search.*
 
 ## What this demonstrates
 
