@@ -17,6 +17,29 @@ Bot:  ✓ Take Vitamins 💊 — 4-day streak 🔥
 Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 ```
 
+## Demo
+
+<p align="center">
+  <img src="docs/screenshots/auto-logged-applications.png" width="32%" alt="Applications auto-logged from Gmail" />
+  <img src="docs/screenshots/job-pipeline-digest.png" width="32%" alt="Daily job-pipeline digest and status alerts" />
+  <img src="docs/screenshots/morning-briefing.png" width="32%" alt="Energy-sorted ADHD morning briefing" />
+</p>
+
+*Left → right: applications auto-detected and logged straight from the inbox; the daily pipeline digest with unprompted rejection/interview alerts; the proactive morning briefing with tasks ordered by energy. Running in production on my own job search.*
+
+## What this demonstrates
+
+Built as a hands-on portfolio piece while pivoting toward data/analytics — the transferable skills, and where each one lives:
+
+| Area | In this project |
+|---|---|
+| **Classification + evaluation** | An LLM email classifier gated by a deterministic prefilter, validated against a labeled fixtures set in CI — tuned for recall, since a false negative silently drops a real application |
+| **ETL / data ingestion** | Idempotent Gmail → Notion pipeline: extract (poll + parse), transform (classify + state machine), load (dedupe by thread-id), plus a 90-day historical backfill |
+| **Data modeling** | Per-role application records + a separate `Pipeline Events` transition log, modeled for funnel analytics |
+| **Analytics thinking** | Funnel framing (conversion per stage, time-in-stage) and a daily pipeline digest |
+| **Testing & CI** | 40+ assertions across 5 suites, run by GitHub Actions on every relevant PR |
+| **Shipping** | 30+ reviewed PRs; deployed and running in production |
+
 ## What it does
 
 - **Tasks / Projects / Ideas / Reading list** — full CRUD in Notion via natural language. New tasks are auto-enriched: inferred energy level, type, and a link to the right project.
@@ -57,7 +80,7 @@ The most engineering-dense part of the repo — an email-driven ETL pipeline wit
 
 ## Engineering practices
 
-- **PR-based development** — every change lands through a reviewed pull request (25+ and counting), squash-merged with CI.
+- **PR-based development** — every change lands through a reviewed pull request (30+ and counting), squash-merged with CI.
 - **Tests where they pay rent** — the pure logic (classifier prefilter, state machine, ingest planner, backfill grouping, interview windows) is unit-tested: 40+ assertions across 5 suites, run by GitHub Actions on relevant PRs.
 - **Dry-run before write** — the seeder and backfill both print a full plan and touch nothing without an explicit `--apply`.
 - **Honest failure reporting** — every tool result is logged (with tracebacks) and surfaced to the user as explicit per-action ✓/✗, never silently swallowed.
