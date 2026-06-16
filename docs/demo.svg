@@ -30,26 +30,32 @@
     <!-- chat area -->
     <rect x="0" y="64" width="340" height="536" fill="#eef3f8"/>
 
-    <!-- bubble 1 -->
-    <rect x="16" y="86" width="300" height="64" rx="16" fill="#ffffff"/>
-    <text x="32" y="112" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
-    <text x="32" y="134" font-size="14.5" fill="#1c2430">Reddit — Analytics Engineer</text>
+    <!-- logged-application bubbles -->
+    <rect x="16" y="84" width="300" height="58" rx="16" fill="#ffffff"/>
+    <text x="32" y="107" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
+    <text x="32" y="129" font-size="14.5" fill="#1c2430">Reddit — Analytics Engineer</text>
 
-    <rect x="16" y="162" width="300" height="64" rx="16" fill="#ffffff"/>
-    <text x="32" y="188" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
-    <text x="32" y="210" font-size="14.5" fill="#1c2430">GitHub — Data Analyst II</text>
+    <rect x="16" y="150" width="300" height="58" rx="16" fill="#ffffff"/>
+    <text x="32" y="173" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
+    <text x="32" y="195" font-size="14.5" fill="#1c2430">GitHub — Data Analyst II</text>
 
-    <rect x="16" y="238" width="300" height="64" rx="16" fill="#ffffff"/>
-    <text x="32" y="264" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
-    <text x="32" y="286" font-size="14.5" fill="#1c2430">Metropolis — Sr. Data Analyst</text>
+    <rect x="16" y="216" width="300" height="58" rx="16" fill="#ffffff"/>
+    <text x="32" y="239" font-size="14.5" font-weight="600" fill="#1c2430">🆕 Logged application <tspan fill="#8a97a8" font-weight="400">(auto)</tspan></text>
+    <text x="32" y="261" font-size="14.5" fill="#1c2430">Metropolis — Sr. Data Analyst</text>
 
-    <!-- status change bubble -->
-    <rect x="16" y="320" width="300" height="86" rx="16" fill="#fdeceb"/>
-    <text x="32" y="346" font-size="14.5" font-weight="600" fill="#b3261e">❌ DoorDash — Associate,</text>
-    <text x="32" y="367" font-size="14.5" fill="#1c2430">New Verticals: now Rejected</text>
-    <text x="32" y="392" font-size="12.5" fill="#2a6ed4">↳ opens the Gmail thread</text>
+    <!-- positive status change (green) -->
+    <rect x="16" y="282" width="300" height="84" rx="16" fill="#e6f6ea"/>
+    <text x="32" y="308" font-size="14.5" font-weight="600" fill="#1f7a3d">📞 Affirm — Data Analyst:</text>
+    <text x="32" y="329" font-size="14.5" fill="#1c2430">now Recruiter Screen</text>
+    <text x="32" y="352" font-size="12.5" fill="#2a6ed4">↳ opens the Gmail thread</text>
 
-    <text x="170" y="450" text-anchor="middle" font-size="12.5" fill="#8a97a8">…within an hour of the email landing</text>
+    <!-- rejection status change (red) -->
+    <rect x="16" y="378" width="300" height="84" rx="16" fill="#fdeceb"/>
+    <text x="32" y="404" font-size="14.5" font-weight="600" fill="#b3261e">❌ DoorDash — Associate:</text>
+    <text x="32" y="425" font-size="14.5" fill="#1c2430">now Rejected</text>
+    <text x="32" y="448" font-size="12.5" fill="#2a6ed4">↳ opens the Gmail thread</text>
+
+    <text x="170" y="496" text-anchor="middle" font-size="12.5" fill="#8a97a8">…within an hour of each email</text>
   </g>
   <text x="230" y="775" text-anchor="middle" font-size="15.5" font-weight="600" fill="#0f1b2d">Detected &amp; logged from Gmail</text>
   <text x="230" y="797" text-anchor="middle" font-size="13.5" fill="#5b6b80">zero manual status updates</text>
