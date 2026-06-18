@@ -71,6 +71,13 @@ def test_match_per_role_disambiguation():
     assert m2["by"] == "ambiguous" and len(m2["candidates"]) == 2, m2
 
 
+def test_match_company_substring_either_direction():
+    # a verbose classified name should still match a terser record
+    records = [{"id": "1", "company": "LA28", "role": "Senior Associate", "thread_ids": []}]
+    m = match_application("LA28-USOPP", "Senior Associate", None, records)
+    assert m["by"] == "company_role" and m["match"]["id"] == "1", m
+
+
 def test_match_none():
     assert match_application("Unknown Co", "Role", None, [])["match"] is None
 

@@ -113,7 +113,13 @@ def match_application(company: str, role: str, thread_id: str, records: list) ->
     if not comp:
         return {"match": None, "by": None}
 
-    cands = [r for r in records if comp in (r.get("company") or "").strip().lower()]
+    # Substring either direction: a classifier's verbose name ("LA28-USOPP",
+    # "GitHub, Inc.") should still match a terser record ("LA28", "GitHub").
+    def company_matches(rec):
+        rc = (rec.get("company") or "").strip().lower()
+        return bool(rc) and (comp in rc or rc in comp)
+
+    cands = [r for r in records if company_matches(r)]
     if role:
         cands = _filter_role_tiered(cands, role)
 
