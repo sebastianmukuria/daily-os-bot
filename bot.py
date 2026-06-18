@@ -35,6 +35,7 @@ MAX_TOOL_ITERATIONS = 8  # cap the agentic loop so it can't run away on tokens
 TELEGRAM_MAX_CHARS = 4096
 PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "20"))
 PIPELINE_DIGEST_HOUR = int(os.environ.get("PIPELINE_DIGEST_HOUR", "8"))  # ET
+HEALTHCHECK_HOUR = int(os.environ.get("HEALTHCHECK_HOUR", "7"))  # ET; before the digest
 # Switch models without code changes: set CLAUDE_MODEL in the environment.
 # Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
@@ -420,6 +421,25 @@ async def pipeline_daily(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("pipeline_daily failed")
 
 
+async def gmail_healthcheck(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Confirm Gmail auth still works; alert on Telegram if it's broken (e.g. an
+    expired/revoked token) so an outage surfaces in minutes, not days. Runs once
+    at startup (catches a bad deploy) and daily (catches mid-life token expiry)."""
+    import tools
+    try:
+        await asyncio.to_thread(tools.gmail_check)
+    except Exception as e:
+        logger.exception("gmail_healthcheck: Gmail auth check failed")
+        await context.bot.send_message(
+            chat_id=ALLOWED_CHAT_ID,
+            text=(
+                "⚠️ Gmail access is down — the job tracker can't read your inbox.\n"
+                f"({type(e).__name__})\n"
+                "Fix: re-run auth_google.py, then update GOOGLE_TOKEN_JSON on Railway."
+            ),
+        )
+
+
 async def interview_watch(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Hourly: remind ~1h before interviews and prompt a debrief after they end.
     Debriefs are captured by replying to the prompt (the reply lands a note on the
@@ -496,8 +516,15 @@ def main() -> None:
             time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
         )
         app.job_queue.run_repeating(interview_watch, interval=3600, first=90)
-        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET; interview watch hourly",
-                    PIPELINE_POLL_MINUTES, PIPELINE_DIGEST_HOUR)
+        # Gmail auth health check: verify on startup, then daily.
+        app.job_queue.run_once(gmail_healthcheck, when=60)
+        app.job_queue.run_daily(
+            gmail_healthcheck,
+            time=dtime(HEALTHCHECK_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
+        )
+        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET; "
+                    "interview watch hourly; Gmail health check at %02d:00 ET + startup",
+                    PIPELINE_POLL_MINUTES, PIPELINE_DIGEST_HOUR, HEALTHCHECK_HOUR)
     else:
         logger.warning("JobQueue unavailable — install python-telegram-bot[job-queue] "
                        "to enable Gmail pipeline ingestion")
