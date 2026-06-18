@@ -108,6 +108,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
 | `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
 | `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
+| `HEALTHCHECK_HOUR` | Daily Gmail-auth check (ET); also runs at startup, alerts on failure | `7` |
 | `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
 
 ## Project structure
