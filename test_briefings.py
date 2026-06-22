@@ -6,7 +6,7 @@ Unit tests for the briefing formatters (pure — no I/O).
 """
 
 from datetime import date
-from briefings import format_morning, format_midday, format_eod
+from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end
 
 TODAY = date(2026, 6, 20)
 
@@ -79,6 +79,52 @@ def test_eod_rolling_cap_and_habits():
     out = format_eod([], rolling, [], TODAY, habits)
     assert "+3 more" in out                       # 15 rolling, capped at 12
     assert "Habits still open" in out and "Walk" in out
+
+
+def test_week_start():
+    cal = {"days": [
+        {"date": "2026-06-22", "label": "Mon Jun 22", "events": [
+            {"summary": "Standup", "time_str": "10:00am", "sort_key": "10:00", "all_day": False, "location": "", "calendar": "sebastian@blockworks.co"}]},
+        {"date": "2026-06-23", "label": "Tue Jun 23", "events": []},
+    ], "total": 1}
+    due = [{"name": "Submit report", "due_date": "2026-06-25"}]        # Thu
+    jobs = [{"company": "Helio", "role": "Data Analyst", "status": "Recruiter Screen", "next_action_due": "2026-06-24"}]  # Wed
+    checkins = [{"name": "Side project", "next_check_in": "2026-06-26"}]  # Fri
+    out = format_week_start(cal, due, jobs, checkins, "Jun 22 – 28")
+    assert "Week Ahead — Jun 22 – 28" in out
+    assert "Mon Jun 22" in out and "[Blockworks] Standup" in out
+    assert "Tue Jun 23" not in out                       # empty day skipped
+    assert "Wed · Helio" in out and "Interviews & job actions" in out
+    assert "Thu · Submit report" in out
+    assert "Fri · Side project" in out
+    assert "Heads up:" in out
+
+
+def test_week_start_empty():
+    cal = {"days": [{"date": "2026-06-22", "label": "Mon Jun 22", "events": []}], "total": 0}
+    out = format_week_start(cal, [], [], [], "Jun 22 – 28")
+    assert "Nothing scheduled yet." in out
+
+
+def test_week_end():
+    next_cal = {"days": [{"date": "2026-06-27", "label": "Sat Jun 27", "events": [
+        {"summary": "Brunch", "time_str": "11:00am", "sort_key": "11:00", "all_day": False, "location": "", "calendar": "Personal"}]}], "total": 1}
+    done = [f"Task {i}" for i in range(10)]
+    events = [{"to_status": "Rejected"}, {"to_status": "Rejected"}, {"to_status": "Recruiter Screen"}]
+    overdue = [{"name": "Late thing", "due_date": "2026-06-20"}]
+    upcoming = [{"company": "Cobalt", "status": "Interviewing", "next_action_due": "2026-06-30"}]
+    out = format_week_end(done, events, next_cal, overdue, 3, upcoming, "Jun 22 – 26")
+    assert "Week in Review — Jun 22 – 26" in out
+    assert "10 task(s) done" in out and "+2 more" in out
+    assert "3 update(s): 2 Rejected, 1 Recruiter Screen" in out
+    assert "Loose ends" in out and "Late thing" in out and "3 stale" in out
+    assert "Heading into next week" in out and "Sat Jun 27" in out and "Brunch" in out and "Cobalt" in out
+
+
+def test_week_end_quiet():
+    out = format_week_end([], [], {"days": [], "total": 0}, [], 0, [], "Jun 22 – 26")
+    assert "Nothing marked done" in out and "No pipeline movement" in out
+    assert "Heading into next week" not in out
 
 
 def _run():
