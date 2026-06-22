@@ -3,6 +3,8 @@
 credentials.json
 token.json
 token.pickle
+snowflake_key.p8
+snowflake_key.pub
 
 # Personal data
 seed_data.yaml

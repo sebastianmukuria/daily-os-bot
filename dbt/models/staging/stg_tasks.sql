@@ -1,5 +1,5 @@
 with src as (
-    select page_id, created_time, last_edited_time, properties
+    select page_id, created_time, last_edited_time, parse_json(properties) as properties
     from {{ source('notion', 'notion_pages') }}
     where source = 'tasks'
 )

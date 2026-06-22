@@ -36,20 +36,23 @@ SOURCES = {
     "pipeline_events": "bf426aeb-7a4c-45d5-83ac-7155e28cca79",
 }
 
+# Full-refresh each run. properties lands as raw JSON text; dbt staging
+# parse_json()s it into a VARIANT. (Loading text lets executemany batch — the
+# connector can't batch an INSERT ... SELECT parse_json().)
 DDL = [
     "create schema if not exists RAW",
-    """create table if not exists RAW.NOTION_PAGES (
+    """create or replace table RAW.NOTION_PAGES (
         source            string,
         page_id           string,
         created_time      string,
         last_edited_time  string,
-        properties        variant,
+        properties        string,
         loaded_at         timestamp_tz default current_timestamp()
     )""",
 ]
 
 INSERT = """insert into RAW.NOTION_PAGES (source, page_id, created_time, last_edited_time, properties)
-            select %s, %s, %s, %s, parse_json(%s)"""
+            values (%s, %s, %s, %s, %s)"""
 
 
 def fetch_pages(notion: Client, ds_id: str) -> list:
@@ -68,14 +71,21 @@ def fetch_pages(notion: Client, ds_id: str) -> list:
 
 
 def connect():
-    return snowflake.connector.connect(
+    # Prefer key-pair auth (works around MFA-on-password and is CI-friendly);
+    # fall back to password if no key path is set.
+    kwargs = dict(
         account=os.environ["SNOWFLAKE_ACCOUNT"],
         user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
         role=os.environ.get("SNOWFLAKE_ROLE"),
         warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
         database=os.environ["SNOWFLAKE_DATABASE"],
     )
+    key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if key_path:
+        kwargs["private_key_file"] = key_path
+    else:
+        kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
+    return snowflake.connector.connect(**kwargs)
 
 
 def main() -> None:
@@ -83,9 +93,17 @@ def main() -> None:
     conn = connect()
     cur = conn.cursor()
     try:
+        wh = os.environ["SNOWFLAKE_WAREHOUSE"]
+        db = os.environ["SNOWFLAKE_DATABASE"]
+        cur.execute(
+            f"create warehouse if not exists {wh} warehouse_size = xsmall "
+            "auto_suspend = 60 auto_resume = true initially_suspended = true"
+        )
+        cur.execute(f"use warehouse {wh}")
+        cur.execute(f"create database if not exists {db}")
+        cur.execute(f"use database {db}")
         for stmt in DDL:
             cur.execute(stmt)
-        cur.execute("truncate table RAW.NOTION_PAGES")
 
         total = 0
         for source, ds_id in SOURCES.items():

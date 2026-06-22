@@ -9,12 +9,14 @@ models:
       - name: status
         tests:
           - accepted_values:
-              values: ['Not Started', 'In Progress', 'Done', 'Blocked']
+              arguments:
+                values: ['Not Started', 'In Progress', 'Done', 'Blocked']
               config: {severity: warn}
       - name: energy
         tests:
           - accepted_values:
-              values: ['High', 'Medium', 'Low']
+              arguments:
+                values: ['High', 'Medium', 'Low']
               config: {severity: warn}
 
   - name: stg_projects
@@ -37,7 +39,8 @@ models:
       - name: status
         tests:
           - accepted_values:
-              values: ['Want to read', 'Reading', 'Done']
+              arguments:
+                values: ['Want to read', 'Reading', 'Done']
               config: {severity: warn}
 
   - name: stg_habits
@@ -54,7 +57,8 @@ models:
       - name: status
         tests:
           - accepted_values:
-              values: ['Applied', 'Recruiter Screen', 'Interviewing', 'Final Round', 'Offer', 'Rejected', 'Withdrawn', 'Ghosted']
+              arguments:
+                values: ['Applied', 'Recruiter Screen', 'Interviewing', 'Final Round', 'Offer', 'Rejected', 'Withdrawn', 'Ghosted']
               config: {severity: warn}
 
   - name: stg_pipeline_events
@@ -66,6 +70,7 @@ models:
         description: "FK to stg_applications. Warn-only: an event can outlive a deleted application."
         tests:
           - relationships:
-              to: ref('stg_applications')
-              field: application_id
+              arguments:
+                to: ref('stg_applications')
+                field: application_id
               config: {severity: warn}
