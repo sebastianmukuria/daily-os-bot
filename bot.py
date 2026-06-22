@@ -436,8 +436,9 @@ async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
                 except Exception:
                     pass
         events = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
+        habits = (await tools._get_habits())["habits"]
         today = datetime.now(ZoneInfo("America/New_York")).date()
-        text = briefings.format_morning(tasks, events, today)
+        text = briefings.format_morning(tasks, events, today, habits)
         await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
     except Exception:
         logger.exception("morning_briefing failed")
@@ -466,8 +467,9 @@ async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
         done = await tools.get_tasks_done_today()
         rolling = (await tools._get_tasks())["tasks"]
         tomorrow = (await asyncio.to_thread(tools.get_events_for_day, 1))["events"]
+        habits = (await tools._get_habits())["habits"]
         today = datetime.now(ZoneInfo("America/New_York")).date()
-        text = briefings.format_eod(done, rolling, tomorrow, today)
+        text = briefings.format_eod(done, rolling, tomorrow, today, habits)
         await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
     except Exception:
         logger.exception("eod_wrap failed")

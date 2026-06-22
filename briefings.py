@@ -12,7 +12,9 @@ from datetime import date
 
 ENERGY_EMOJI = {"High": "⚡", "Medium": "🔋", "Low": "🪫"}
 _ENERGY_RANK = {"High": 0, "Medium": 1, "Low": 2}
-MAX_BRIEFING_TASKS = 8  # cap the morning list; note the remainder
+MAX_BRIEFING_TASKS = 8   # cap the morning energy list; note the remainder
+MAX_STALE_SHOWN = 5      # cap the stale callout so it doesn't become a wall
+MAX_ROLLING_SHOWN = 12   # cap the EOD rolling-to-tomorrow list
 
 
 def _esc(s: str) -> str:
@@ -50,7 +52,7 @@ def _task_line(task: dict, today_iso: str) -> str:
     return f"• {_esc(task.get('name',''))}{flag}"
 
 
-def format_morning(tasks: list, events: list, today: date) -> str:
+def format_morning(tasks: list, events: list, today: date, habits: list = None) -> str:
     today_iso = today.isoformat()
     lines = [f"☀️ <b>Morning Briefing — {today.strftime('%A, %B %-d')}</b>", ""]
 
@@ -81,10 +83,20 @@ def format_morning(tasks: list, events: list, today: date) -> str:
     if checkins:
         lines += ["", "🔁 <b>Project Check-ins (15 min each)</b>"] + [f"• {_esc(t['name'])}" for t in checkins]
 
+    due_habits = [h for h in (habits or []) if h.get("due_today")]
+    if due_habits:
+        lines += ["", "💪 <b>Habits due today</b>"]
+        lines += [
+            f"• {_esc(h['name'])}" + (f" (🔥 {h['streak']})" if h.get("streak") else "")
+            for h in due_habits
+        ]
+
     stale = [t for t in tasks if t.get("stale")]
     if stale:
         lines += ["", "🔴 <b>Stale — been waiting too long</b>"]
-        lines += [f"• {_esc(t['name'])} ({t.get('rolling_days', 0)} days)" for t in stale]
+        lines += [f"• {_esc(t['name'])} ({t.get('rolling_days', 0)} days)" for t in stale[:MAX_STALE_SHOWN]]
+        if len(stale) > MAX_STALE_SHOWN:
+            lines.append(f"<i>+{len(stale) - MAX_STALE_SHOWN} more stale</i>")
 
     if hidden > 0:
         lines += ["", f"<i>+{hidden} more not shown — check Notion</i>"]
@@ -112,14 +124,24 @@ def format_midday(open_tasks: list, done_count: int, afternoon_events: list, tod
     return "\n".join(lines)
 
 
-def format_eod(done_today: list, rolling: list, tomorrow_events: list, today: date) -> str:
+def format_eod(done_today: list, rolling: list, tomorrow_events: list, today: date, habits: list = None) -> str:
     today_iso = today.isoformat()
     lines = ["🌙 <b>End of Day</b>", "", "✅ <b>Done today</b>"]
     lines += [f"• {_esc(n)}" for n in done_today] if done_today else \
         ["Nothing marked done today — update Notion if you got things done."]
 
     lines += ["", "➡️ <b>Rolling to tomorrow</b>"]
-    lines += [f"• {_esc(t['name'])}" for t in rolling] if rolling else ["Nothing open 🎉"]
+    if rolling:
+        lines += [f"• {_esc(t['name'])}" for t in rolling[:MAX_ROLLING_SHOWN]]
+        if len(rolling) > MAX_ROLLING_SHOWN:
+            lines.append(f"<i>+{len(rolling) - MAX_ROLLING_SHOWN} more</i>")
+    else:
+        lines.append("Nothing open 🎉")
+
+    missed_habits = [h for h in (habits or []) if h.get("due_today")]
+    if missed_habits:
+        lines += ["", "💪 <b>Habits still open</b>"]
+        lines += [f"• {_esc(h['name'])}" for h in missed_habits]
 
     lines += ["", "📅 <b>Tomorrow's calendar</b>"]
     lines += [_fmt_event(e) for e in tomorrow_events] if tomorrow_events else ["Nothing scheduled yet."]
