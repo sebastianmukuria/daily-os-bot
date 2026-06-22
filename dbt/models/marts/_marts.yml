@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: fct_applications
+    description: "Job applications with lifecycle flags and age. Grain: one application."
+    columns:
+      - name: application_id
+        tests: [unique, not_null]
+      - name: status
+        tests: [not_null]
+
+  - name: fct_pipeline_events
+    description: "Status-transition events, sequenced per application. Grain: one event."
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+
+  - name: mart_funnel
+    description: >
+      Application funnel: count reaching each stage (from current status + full
+      transition history), plus stage-over-stage conversion. Grain: one stage.
+    columns:
+      - name: stage
+        tests: [unique, not_null]
+      - name: applications_reached
+        tests: [not_null]
+
+  - name: fct_tasks
+    description: "Tasks with done/overdue/stale flags and age. Grain: one task."
+    columns:
+      - name: task_id
+        tests: [unique, not_null]
+
+  - name: fct_habits
+    description: "Habits with streak and recency. Grain: one habit."
+    columns:
+      - name: habit_id
+        tests: [unique, not_null]

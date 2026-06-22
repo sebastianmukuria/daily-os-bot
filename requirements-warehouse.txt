@@ -1,0 +1,6 @@
+# Data-warehouse stack (the EL job + dbt). Kept separate from the bot's
+# requirements.txt so the bot's deploy image stays lean — only CI installs these.
+notion-client
+snowflake-connector-python
+dbt-snowflake
+python-dotenv
