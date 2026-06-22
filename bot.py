@@ -531,6 +531,58 @@ async def dc_events_scout(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("dc_events_scout failed")
 
 
+async def inbox_calendar_sync(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """8am + 6pm ET — scan recent mail for events/bookings, add to calendar
+    (dedup'd), file follow-ups, and notify only if something was created."""
+    import tools, inbox_events
+    query = (
+        f"newer_than:2d -label:{tools.CALENDAR_SYNC_LABEL} "
+        "(confirmation OR reservation OR booking OR itinerary OR flight OR hotel OR "
+        "ticket OR appointment OR invite OR reschedule)"
+    )
+    try:
+        candidates = await asyncio.to_thread(tools.gmail_fetch_all, query, 25)
+    except Exception:
+        logger.exception("inbox_calendar_sync: gmail fetch failed")
+        return
+
+    created = []
+    for email in candidates:
+        try:
+            if not inbox_events.looks_like_event(email):
+                continue
+            ev = await asyncio.to_thread(inbox_events.extract_event, email)
+            # label first so we never re-extract this message, event or not
+            await asyncio.to_thread(
+                tools.gmail_apply_processed_label, email["id"], tools.CALENDAR_SYNC_LABEL
+            )
+            if not ev.get("is_event") or not ev.get("date"):
+                continue
+            if await asyncio.to_thread(tools.calendar_event_exists, ev["title"], ev["date"]):
+                continue
+            start, end, all_day = inbox_events.build_event_times(
+                ev["date"], ev.get("start_time", ""), ev.get("end_time", ""), ev.get("all_day", False)
+            )
+            desc = f"Confirmation: {ev['confirmation']}" if ev.get("confirmation") else None
+            await asyncio.to_thread(
+                tools._create_calendar_event, ev["title"], start, end, all_day,
+                ev.get("location") or None, desc,
+            )
+            when = ev["date"] + (f" {ev['start_time']}" if ev.get("start_time") else " (all day)")
+            created.append(f"• {ev['title']} — {when}")
+            if ev.get("followup"):
+                try:
+                    await tools._create_task(name=ev["followup"], energy="Low", type="Task")
+                except Exception:
+                    logger.exception("inbox_calendar_sync: follow-up task failed")
+        except Exception:
+            logger.exception("inbox_calendar_sync: failed on %s", email.get("id"))
+
+    if created:
+        text = "📧 <b>Inbox Sync</b>\n\nAdded to your calendar:\n" + "\n".join(created)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+
+
 async def gmail_healthcheck(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Confirm Gmail auth still works; alert on Telegram if it's broken (e.g. an
     expired/revoked token) so an outage surfaces in minutes, not days. Runs once
@@ -632,6 +684,8 @@ def main() -> None:
         app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
         app.job_queue.run_daily(eod_wrap, time=dtime(18, 0, tzinfo=ET))
         app.job_queue.run_daily(dc_events_scout, time=dtime(10, 0, tzinfo=ET))  # gated to Thu+Sun
+        app.job_queue.run_daily(inbox_calendar_sync, time=dtime(8, 0, tzinfo=ET))
+        app.job_queue.run_daily(inbox_calendar_sync, time=dtime(18, 5, tzinfo=ET))
         # Gmail auth health check: verify on startup, then daily.
         app.job_queue.run_once(gmail_healthcheck, when=60)
         app.job_queue.run_daily(

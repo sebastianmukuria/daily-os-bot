@@ -20,6 +20,7 @@ logger = logging.getLogger("daily_os_bot.tools")
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 GOOGLE_SCOPES = ["https://www.googleapis.com/auth/calendar", GMAIL_SCOPE]
 PROCESSED_LABEL = "JobTracker/Processed"
+CALENDAR_SYNC_LABEL = "CalendarSync/Processed"
 
 # These are Notion *data source* IDs (new 2025-09-03 API). Querying happens on
 # data sources, not databases. Page creation uses a data_source_id parent.
@@ -109,16 +110,16 @@ def _get_gmail_service():
     return build("gmail", "v1", credentials=creds)
 
 
-def gmail_processed_label_id(service) -> str:
-    """Get the JobTracker/Processed label id, creating the label if needed."""
+def gmail_processed_label_id(service, name: str = PROCESSED_LABEL) -> str:
+    """Get a label id, creating the label if needed."""
     labels = service.users().labels().list(userId="me").execute().get("labels", [])
     for label in labels:
-        if label["name"] == PROCESSED_LABEL:
+        if label["name"] == name:
             return label["id"]
     created = service.users().labels().create(
         userId="me",
         body={
-            "name": PROCESSED_LABEL,
+            "name": name,
             "labelListVisibility": "labelShow",
             "messageListVisibility": "show",
         },
@@ -171,12 +172,35 @@ def gmail_fetch_candidates(
     return out
 
 
-def gmail_apply_processed_label(message_id: str) -> None:
+def gmail_apply_processed_label(message_id: str, label_name: str = PROCESSED_LABEL) -> None:
     service = _get_gmail_service()
-    label_id = gmail_processed_label_id(service)
+    label_id = gmail_processed_label_id(service, label_name)
     service.users().messages().modify(
         userId="me", id=message_id, body={"addLabelIds": [label_id]},
     ).execute()
+
+
+def calendar_event_exists(title: str, date_iso: str) -> bool:
+    """True if an event with a matching title already exists on `date_iso`
+    (primary calendar) — avoids duplicate inbox-sync creations."""
+    service = _get_calendar_service()
+    et = pytz.timezone(ET)
+    day = datetime.fromisoformat(date_iso).date()
+    start = et.localize(datetime(day.year, day.month, day.day, 0, 0))
+    end = start + timedelta(days=1)
+    try:
+        res = service.events().list(
+            calendarId="primary", timeMin=start.isoformat(), timeMax=end.isoformat(),
+            singleEvents=True, maxResults=50,
+        ).execute()
+    except Exception:
+        return False
+    t = _fold(title)
+    for e in res.get("items", []):
+        s = _fold(e.get("summary", ""))
+        if s and (t in s or s in t):
+            return True
+    return False
 
 
 def gmail_fetch_all(query: str, max_results: int = 2000) -> list:
