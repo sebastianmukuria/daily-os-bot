@@ -31,7 +31,7 @@ Built as a hands-on portfolio piece while pivoting toward data/analytics — the
 |---|---|
 | **Classification + evaluation** | An LLM email classifier gated by a deterministic prefilter, validated against a labeled fixtures set in CI — tuned for recall, since a false negative silently drops a real application |
 | **ETL / data ingestion** | Idempotent Gmail → Notion pipeline: extract (poll + parse), transform (classify + state machine), load (dedupe by thread-id), plus a 90-day historical backfill |
-| **Analytics engineering** | The modern stack end-to-end: Notion → Snowflake (VARIANT) → **dbt** staging/marts with tests + docs, scheduled in CI — a funnel mart with stage conversion as the headline |
+| **Analytics engineering** | The modern stack end-to-end: Notion → Snowflake (VARIANT) → **dbt** staging/marts with tests + docs, scheduled in CI, surfaced in an **Evidence** dashboard (BI-as-code) — a funnel mart with stage conversion as the headline |
 | **Data modeling** | Per-role application records + a separate `Pipeline Events` transition log, modeled for funnel analytics |
 | **Analytics thinking** | Funnel framing (conversion per stage, time-in-stage) and a daily pipeline digest |
 | **Testing & CI** | 40+ assertions across 5 suites, run by GitHub Actions on every relevant PR |
@@ -93,6 +93,14 @@ Notion ──(el_notion.py)──▶ Snowflake RAW ──(dbt)──▶ STAGING 
 
 Auth is **key-pair** (MFA-safe and CI-friendly): generate an RSA key pair, register the public half on your user (`ALTER USER <you> SET RSA_PUBLIC_KEY='...'`), and point `SNOWFLAKE_PRIVATE_KEY_PATH` at the private key. Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
 
+### Dashboard ([Evidence](https://evidence.dev))
+
+The marts feed an Evidence dashboard — BI-as-code (SQL + markdown, version-controlled, deploys as a static site). The committed demo runs on **synthetic data** so it's safe to share publicly; the same project points at the live Snowflake marts locally, so real job-search data never leaves the machine.
+
+![Evidence job-search funnel dashboard — dark mode, synthetic data](docs/evidence-dashboard.png)
+
+Run it: `cd evidence && npm install && npm run sources && npm run dev`.
+
 ## Engineering practices
 
 - **PR-based development** — every change lands through a reviewed pull request (30+ and counting), squash-merged with CI.
@@ -146,6 +154,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `seed.py` | Idempotent bulk-seeder for projects/tasks/ideas from YAML |
 | `el_notion.py` | EL job: snapshot all Notion DBs → Snowflake `RAW.NOTION_PAGES` (VARIANT) |
 | `dbt/` | dbt Core project: staging + marts models, tests, docs, macros |
+| `evidence/` | Evidence.dev dashboard (BI-as-code) on synthetic demo data |
 | `test_*.py`, `fixtures/` | Unit tests + labeled email fixtures (run in CI) |
 | `auth_google.py` | One-time Google OAuth (Calendar + Gmail scopes) |
 
