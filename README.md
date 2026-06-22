@@ -31,6 +31,7 @@ Built as a hands-on portfolio piece while pivoting toward data/analytics — the
 |---|---|
 | **Classification + evaluation** | An LLM email classifier gated by a deterministic prefilter, validated against a labeled fixtures set in CI — tuned for recall, since a false negative silently drops a real application |
 | **ETL / data ingestion** | Idempotent Gmail → Notion pipeline: extract (poll + parse), transform (classify + state machine), load (dedupe by thread-id), plus a 90-day historical backfill |
+| **Analytics engineering** | The modern stack end-to-end: Notion → Snowflake (VARIANT) → **dbt** staging/marts with tests + docs, scheduled in CI — a funnel mart with stage conversion as the headline |
 | **Data modeling** | Per-role application records + a separate `Pipeline Events` transition log, modeled for funnel analytics |
 | **Analytics thinking** | Funnel framing (conversion per stage, time-in-stage) and a daily pipeline digest |
 | **Testing & CI** | 40+ assertions across 5 suites, run by GitHub Actions on every relevant PR |
@@ -73,6 +74,24 @@ The most engineering-dense part of the repo — an email-driven ETL pipeline wit
 3. **Per-role matching.** Records are per-role, not per-company. Tiered matching (exact → edge → substring) keeps "Analyst I" and "Analyst II" at the same company separate — and ambiguity returns candidates for a human decision rather than guessing.
 4. **Idempotent ingestion.** A Gmail label is the processing ledger; Notion writes dedupe by thread-id. Every status change appends to a `Pipeline Events` log for funnel analytics (conversion per stage, time-in-stage).
 5. **90-day backfill.** A one-time script reconstructs historical applications: thread-id union-find groups emails per application, chronological replay through the state machine derives final status, real email timestamps stamp the dates. Dry-run by default, prints a reviewable plan, optionally validates against a known-state file, and resumes from an incremental classification cache (rate-limit-safe).
+
+## Analytics warehouse (Snowflake + dbt)
+
+Notion is the operational store; for analytics the data is modeled in a proper warehouse using the modern **ELT** stack — extract-load raw, then transform in-warehouse with version-controlled, tested SQL.
+
+```
+Notion ──(el_notion.py)──▶ Snowflake RAW ──(dbt)──▶ STAGING ──(dbt)──▶ MARTS
+         every page as                cast + rename        fct_/mart_ + tests
+         VARIANT JSON                 (one stg_ per DB)     (funnel, tasks, habits…)
+```
+
+- **Extract-load** ([el_notion.py](el_notion.py)) snapshots all seven Notion databases into `RAW.NOTION_PAGES`, landing each page's properties as a Snowflake **VARIANT** — so the loader is schema-agnostic and all typing happens in dbt.
+- **Staging** parses the VARIANT into typed columns (one `stg_` model per database; a `strip_emoji` macro normalizes `🟢 Done` → `Done`).
+- **Marts** model the analytics: `fct_applications`, `fct_pipeline_events`, `fct_tasks`, `fct_habits`, and the headline **`mart_funnel`** — applications reaching each stage (from current status *and* full transition history) with stage-over-stage conversion.
+- **Tested + documented** — `unique` / `not_null` / `accepted_values` / `relationships` tests and column docs across staging and marts, run by `dbt build`.
+- **Orchestrated** by a scheduled [GitHub Action](.github/workflows/warehouse.yml): daily EL → `dbt build`, Snowflake creds in repo secrets.
+
+Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
 
 ## Engineering practices
 
@@ -125,6 +144,8 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `pipeline_interviews.py` | Interview detection, reminder + debrief windows (pure) |
 | `pipeline_backfill.py` | One-time 90-day historical reconstruction (dry-run first) |
 | `seed.py` | Idempotent bulk-seeder for projects/tasks/ideas from YAML |
+| `el_notion.py` | EL job: snapshot all Notion DBs → Snowflake `RAW.NOTION_PAGES` (VARIANT) |
+| `dbt/` | dbt Core project: staging + marts models, tests, docs, macros |
 | `test_*.py`, `fixtures/` | Unit tests + labeled email fixtures (run in CI) |
 | `auth_google.py` | One-time Google OAuth (Calendar + Gmail scopes) |
 
