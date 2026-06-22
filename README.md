@@ -107,6 +107,8 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `GOOGLE_TOKEN_JSON` | OAuth token for cloud deploys | falls back to `token.json` |
 | `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
 | `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
+| `SCOUT_MODEL` | DC events scout (web search + curation) model | `claude-sonnet-4-6` |
+| `EVENT_MODEL` | Inbox→calendar extraction model | `claude-haiku-4-5` |
 | `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
 | `HEALTHCHECK_HOUR` | Daily Gmail-auth check (ET); also runs at startup, alerts on failure | `7` |
 | `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
@@ -128,7 +130,15 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 
 ## The proactive layer
 
-This bot is the *reactive* half of a larger setup. A separate scheduled-agent layer (Claude scheduled tasks) pushes a morning briefing (energy-ordered tasks + habits due), a midday check, an end-of-day wrap, and Gmail→Calendar sweeps to the same Telegram chat. They share the bot token safely: senders and pollers don't conflict. The bot's reply-context feature closes the loop — reply to any briefing to act on it.
+Beyond answering messages, the bot pushes scheduled briefings to the same chat — all running in-process on the JobQueue (no separate agent), so manual and automated paths reuse the exact same domain logic:
+
+- **Morning briefing** (7:30am ET) — today's calendar (across *all* calendars) plus tasks ordered by energy, project check-ins, and stale-task flags.
+- **Midday check** (12:30pm) — done-vs-open count, afternoon events, top remaining tasks.
+- **End-of-day wrap** (6pm) — what got done, what's rolling to tomorrow, tomorrow's calendar.
+- **Inbox → Calendar sync** (8am + 6pm) — scans recent mail for flights / hotels / reservations / tickets, extracts them with an LLM (structured output), dedupes against the calendar, and adds them (notifying only when something's created).
+- **DC events scout** (Thu + Sun, 10am) — web-searches and curates local events for the week ahead.
+
+The reactive briefings are deterministic formatters (unit-tested, no per-run LLM cost); the inbox sync and events scout use Claude where judgment is needed. The bot's reply-context feature closes the loop — reply to any briefing to act on it ("add the 2nd one to my calendar").
 
 ## Limitations & roadmap
 
