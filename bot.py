@@ -346,7 +346,8 @@ async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "• add: call dentist, low energy\n"
         "• done: call dentist\n"
         "• idea: build a habit tracker\n"
-        "• What's on my calendar this week?"
+        "• What's on my calendar this week?\n\n"
+        "/help — full list of commands and capabilities"
     )
 
 
@@ -378,6 +379,82 @@ async def handle_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         nxt = f"  · next: {a['next_action']}" if a.get("next_action") else ""
         lines.append(f"• {a['company']}{role}{nxt}")
     await send_reply(update, "\n".join(lines))
+
+
+async def handle_briefing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """On-demand morning briefing."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await morning_briefing(context)
+
+
+async def handle_midday(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """On-demand midday check."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await midday_check(context)
+
+
+async def handle_eod(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """On-demand end-of-day wrap."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await eod_wrap(context)
+
+
+async def handle_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Live job-search funnel snapshot (current status), straight from Notion."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    apps = (await execute_tool("get_pipeline", {})).get("applications", [])
+    if not apps:
+        await send_reply(update, "No applications in the pipeline yet.")
+        return
+    counts: dict = {}
+    for a in apps:
+        counts[a["status"]] = counts.get(a["status"], 0) + 1
+    order = ["Applied", "Recruiter Screen", "Interviewing", "Final Round", "Offer",
+             "Rejected", "Withdrawn", "Ghosted"]
+    total = len(apps)
+    advanced = sum(counts.get(s, 0) for s in ("Recruiter Screen", "Interviewing", "Final Round", "Offer"))
+    lines = [f"📊 <b>Job Pipeline</b> — {total} applications", ""]
+    lines += [f"• {s}: {counts[s]}" for s in order if counts.get(s)]
+    lines += ["", f"Currently past screen: {advanced} · Offers: {counts.get('Offer', 0)}",
+              "<i>Full conversion funnel lives in the Evidence dashboard.</i>"]
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text="\n".join(lines), parse_mode="HTML"
+    )
+
+
+async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List everything the bot can do."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    await update.message.reply_text(
+        "🤖 Daily OS — here's what I can do.\n\n"
+        "Commands:\n"
+        "/briefing — morning briefing on demand\n"
+        "/midday — midday check\n"
+        "/eod — end-of-day wrap\n"
+        "/funnel — job-search funnel snapshot\n"
+        "/pipeline — applications by status\n"
+        "/clear — reset our conversation\n"
+        "/help — this message\n\n"
+        "Or just talk to me:\n"
+        "• add: call dentist, low energy\n"
+        "• done: call dentist\n"
+        "• took my vitamins  (logs a habit + streak)\n"
+        "• idea: build a habit tracker\n"
+        "• reading: <url>\n"
+        "• what's on my calendar this week?\n"
+        "• reply to any message → \"add the 2nd one to my calendar\"\n\n"
+        "I also reach out on my own: morning/midday/EOD briefings, job-application "
+        "updates from your inbox, inbox→calendar sync, and a Thu/Sun DC events scout."
+    )
 
 
 async def pipeline_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -667,6 +744,11 @@ def main() -> None:
     app.add_handler(CommandHandler("start", handle_start))
     app.add_handler(CommandHandler("clear", handle_clear))
     app.add_handler(CommandHandler("pipeline", handle_pipeline))
+    app.add_handler(CommandHandler("briefing", handle_briefing))
+    app.add_handler(CommandHandler("midday", handle_midday))
+    app.add_handler(CommandHandler("eod", handle_eod))
+    app.add_handler(CommandHandler("funnel", handle_funnel))
+    app.add_handler(CommandHandler("help", handle_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(on_error)
 
