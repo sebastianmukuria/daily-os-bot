@@ -10,12 +10,14 @@ on:
       - "pipeline_ingest.py"
       - "pipeline_backfill.py"
       - "pipeline_interviews.py"
+      - "briefings.py"
       - "fixtures/**"
       - "test_classifier.py"
       - "test_pipeline_state.py"
       - "test_pipeline_ingest.py"
       - "test_pipeline_backfill.py"
       - "test_pipeline_interviews.py"
+      - "test_briefings.py"
   workflow_dispatch:
 
 jobs:
@@ -38,3 +40,5 @@ jobs:
         run: python3 test_pipeline_backfill.py
       - name: Interview-watch tests
         run: python3 test_pipeline_interviews.py
+      - name: Briefing formatter tests
+        run: python3 test_briefings.py
