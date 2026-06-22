@@ -868,7 +868,11 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
             page["created_time"].replace("Z", "+00:00")
         ).date()
         rolling_days = (today - created).days  # how long it's been open
-        stale = _checkbox(props, "Stale") or rolling_days >= 3
+        due_date = _date(props, "Due Date")
+        # A task scheduled for today/the future isn't "stale" — it's just waiting
+        # its turn. Only flag old tasks that have no upcoming due date.
+        has_upcoming_due = bool(due_date) and due_date >= today.isoformat()
+        stale = (_checkbox(props, "Stale") or rolling_days >= 3) and not has_upcoming_due
 
         tasks.append({
             "id": page["id"],
@@ -876,7 +880,7 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
             "energy": energy,
             "type": _select(props, "Type"),
             "status": _select(props, "Status"),
-            "due_date": _date(props, "Due Date"),
+            "due_date": due_date,
             "rolling_days": rolling_days,
             "stale": stale,
         })
@@ -1342,17 +1346,33 @@ async def _get_habits() -> dict:
         data_source_id=HABITS_DS_ID,
         filter={"property": "Active", "checkbox": {"equals": True}},
     )
-    today = datetime.now(pytz.timezone(ET)).date().isoformat()
+    today_d = datetime.now(pytz.timezone(ET)).date()
+    today = today_d.isoformat()
+    weekday = today_d.weekday()  # Mon=0 .. Sun=6
     habits = []
     for page in res.get("results", []):
         props = page["properties"]
         last = _date(props, "Last Done")
+        cadence = _select(props, "Cadence")
+        done_today = last == today
+
+        if cadence == "Weekdays":
+            scheduled = weekday < 5
+        elif cadence == "MWF":
+            scheduled = weekday in (0, 2, 4)
+        elif cadence == "Weekly":
+            scheduled = (last is None) or (
+                today_d - datetime.fromisoformat(last).date()).days >= 7
+        else:  # Daily (or unset)
+            scheduled = True
+
         habits.append({
             "name": _title(props, "Name"),
-            "cadence": _select(props, "Cadence"),
+            "cadence": cadence,
             "streak": props.get("Streak", {}).get("number") or 0,
             "last_done": last,
-            "done_today": last == today,
+            "done_today": done_today,
+            "due_today": scheduled and not done_today,
         })
     return {"habits": habits, "count": len(habits)}
 
