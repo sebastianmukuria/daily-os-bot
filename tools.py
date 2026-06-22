@@ -1149,33 +1149,62 @@ def _update_calendar_event(
     }
 
 
+# Calendars that are noise for briefings/queries — skip these when reading events.
+_SKIP_CAL_SUFFIXES = ("#holiday@group.v.calendar.google.com",
+                      "#contacts@group.v.calendar.google.com")
+
+
+def _event_calendar_ids(service) -> list:
+    """All calendars worth reading events from — primary plus shared ones (e.g.
+    work calendars shared into the account) — minus holiday/birthday noise.
+    Returns [(calendar_id, display_name)]. Falls back to primary on error."""
+    try:
+        cals = service.calendarList().list().execute().get("items", [])
+    except Exception:
+        logger.warning("calendarList fetch failed; using primary only")
+        return [("primary", "Personal")]
+    out = []
+    for c in cals:
+        cid = c.get("id", "")
+        if cid.endswith(_SKIP_CAL_SUFFIXES):
+            continue
+        out.append((cid, c.get("summaryOverride") or c.get("summary", "")))
+    return out or [("primary", "Personal")]
+
+
 def get_calendar_events_window(hours_back: int = 0, days_ahead: int = 2) -> list:
-    """Events from `hours_back` ago to `days_ahead` ahead, with id + attendee
-    emails — used by the interview watcher (which needs recent-past events for
-    debrief prompts and attendees for interview detection)."""
+    """Events from `hours_back` ago to `days_ahead` ahead, across all calendars
+    (primary + shared work calendars), with id + attendee emails — used by the
+    interview watcher (recent-past events for debriefs, attendees for detection)."""
     service = _get_calendar_service()
     et = pytz.timezone(ET)
     now = datetime.now(et)
-    result = (
-        service.events().list(
-            calendarId="primary",
-            timeMin=(now - timedelta(hours=hours_back)).isoformat(),
-            timeMax=(now + timedelta(days=days_ahead)).isoformat(),
-            singleEvents=True, orderBy="startTime", maxResults=50,
-        ).execute()
-    )
+    time_min = (now - timedelta(hours=hours_back)).isoformat()
+    time_max = (now + timedelta(days=days_ahead)).isoformat()
+
     out = []
-    for e in result.get("items", []):
-        start = e["start"].get("dateTime")  # skip all-day (no dateTime)
-        if not start:
+    for cid, cname in _event_calendar_ids(service):
+        try:
+            result = service.events().list(
+                calendarId=cid, timeMin=time_min, timeMax=time_max,
+                singleEvents=True, orderBy="startTime", maxResults=50,
+            ).execute()
+        except Exception:
+            logger.warning("calendar fetch failed for %s", cid)
             continue
-        out.append({
-            "id": e["id"],
-            "summary": e.get("summary", ""),
-            "start": start,
-            "location": e.get("location", ""),
-            "attendees": [a.get("email", "") for a in e.get("attendees", [])],
-        })
+        for e in result.get("items", []):
+            start = e["start"].get("dateTime")  # skip all-day (no dateTime)
+            if not start:
+                continue
+            out.append({
+                "id": e["id"],
+                "summary": e.get("summary", ""),
+                "start": start,
+                "location": e.get("location", ""),
+                "attendees": [a.get("email", "") for a in e.get("attendees", [])],
+                "calendar": cname,
+            })
+    out.sort(key=lambda x: x["start"])
     return out
 
 
@@ -1183,30 +1212,30 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
     service = _get_calendar_service()
     et = pytz.timezone("America/New_York")
     now = datetime.now(et)
-
-    events_result = (
-        service.events()
-        .list(
-            calendarId="primary",
-            timeMin=now.isoformat(),
-            timeMax=(now + timedelta(days=days_ahead)).isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-            maxResults=20,
-        )
-        .execute()
-    )
+    time_min = now.isoformat()
+    time_max = (now + timedelta(days=days_ahead)).isoformat()
 
     events = []
-    for event in events_result.get("items", []):
-        start = event["start"].get("dateTime", event["start"].get("date", ""))
-        events.append({
-            "id": event["id"],  # use this to edit the event via update_calendar_event
-            "summary": event.get("summary", "(no title)"),
-            "start": start,
-            "location": event.get("location", ""),
-        })
+    for cid, cname in _event_calendar_ids(service):
+        try:
+            res = service.events().list(
+                calendarId=cid, timeMin=time_min, timeMax=time_max,
+                singleEvents=True, orderBy="startTime", maxResults=20,
+            ).execute()
+        except Exception:
+            logger.warning("calendar fetch failed for %s", cid)
+            continue
+        for event in res.get("items", []):
+            start = event["start"].get("dateTime", event["start"].get("date", ""))
+            events.append({
+                "id": event["id"],  # use this to edit the event via update_calendar_event
+                "summary": event.get("summary", "(no title)"),
+                "start": start,
+                "location": event.get("location", ""),
+                "calendar": cname,  # which calendar it came from (e.g. work vs personal)
+            })
 
+    events.sort(key=lambda x: x["start"])
     return {"events": events, "count": len(events)}
 
 
