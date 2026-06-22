@@ -1,6 +1,7 @@
 # Daily OS Bot
 
 [![Pipeline tests](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml)
+[![Warehouse refresh](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml)
 
 A personal AI assistant that runs your life ops over Telegram — powered by Claude, backed by [Notion](https://notion.so), Google Calendar, and Gmail. Message it in plain English and it manages tasks, projects, habits, reading lists, and calendar events. In the background, it **automatically tracks your job search by reading your inbox**: every application, interview invite, and rejection becomes a structured, queryable pipeline in Notion — no manual status updates.
 
@@ -22,6 +23,18 @@ Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 ![Daily OS Bot demo — applications auto-logged from Gmail, a daily job-pipeline digest with one-tap corrections, and an energy-sorted morning briefing](docs/demo.svg)
 
 *Left → right: applications auto-detected and logged from the inbox (zero manual updates); a one-line request turned into an auto-enriched task plus a protected calendar time-block; and the proactive ADHD morning briefing with tasks ordered by energy. Recreated from real production output, running on my own job search.*
+
+## Contents
+
+- [What this demonstrates](#what-this-demonstrates)
+- [What it does](#what-it-does)
+- [Architecture](#architecture)
+- [The job pipeline tracker](#the-job-pipeline-tracker)
+- [Analytics warehouse (Snowflake + dbt)](#analytics-warehouse-snowflake--dbt)
+- [Setup](#setup)
+- [Project structure](#project-structure)
+- [The proactive layer](#the-proactive-layer)
+- [Limitations & roadmap](#limitations--roadmap)
 
 ## What this demonstrates
 
@@ -179,9 +192,12 @@ The reactive briefings are deterministic formatters (unit-tested, no per-run LLM
 
 ## Development workflow
 
+Common tasks are wrapped in a `Makefile` — `make help` lists them (`make test`, `make warehouse`, `make dashboard`, `make report`).
+
 ```bash
 git checkout -b descriptive-branch-name
-# ...make changes, run the test suites...
+# ...make changes...
+make test      # run all unit suites (override interpreter: make test PYTHON=python3.11)
 git add -A && git commit -m "describe the change"
 git push -u origin descriptive-branch-name
 gh pr create   # CI runs the pipeline tests; review, then squash-merge
