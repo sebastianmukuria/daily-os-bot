@@ -4,3 +4,5 @@ notion-client
 snowflake-connector-python
 dbt-snowflake
 python-dotenv
+matplotlib
+requests
