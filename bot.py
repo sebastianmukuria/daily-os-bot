@@ -452,8 +452,9 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "• reading: <url>\n"
         "• what's on my calendar this week?\n"
         "• reply to any message → \"add the 2nd one to my calendar\"\n\n"
-        "I also reach out on my own: morning/midday/EOD briefings, job-application "
-        "updates from your inbox, inbox→calendar sync, and a Thu/Sun DC events scout."
+        "I also reach out on my own: morning/midday/EOD briefings, Sunday & Friday "
+        "week roundups, job-application updates from your inbox, inbox→calendar sync, "
+        "and a Thu/Sun DC events scout."
     )
 
 
