@@ -1,5 +1,5 @@
 with src as (
-    select page_id, created_time, last_edited_time, properties
+    select page_id, created_time, last_edited_time, parse_json(properties) as properties
     from {{ source('notion', 'notion_pages') }}
     where source = 'pipeline_events'
 )
@@ -9,7 +9,7 @@ select
     properties:"Event":title[0]:plain_text::string     as event_name,
     properties:"From Status":rich_text[0]:plain_text::string as from_status,
     properties:"To Status":rich_text[0]:plain_text::string   as to_status,
-    properties:"Trigger":rich_text[0]:plain_text::string     as trigger,
+    properties:"Trigger":rich_text[0]:plain_text::string     as event_trigger,
     properties:"Thread Link":url::string               as thread_link,
     try_to_timestamp_tz(properties:"Timestamp":date:start::string) as event_at,
     created_time::timestamp_tz                          as created_at

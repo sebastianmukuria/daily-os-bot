@@ -91,7 +91,7 @@ Notion ──(el_notion.py)──▶ Snowflake RAW ──(dbt)──▶ STAGING 
 - **Tested + documented** — `unique` / `not_null` / `accepted_values` / `relationships` tests and column docs across staging and marts, run by `dbt build`.
 - **Orchestrated** by a scheduled [GitHub Action](.github/workflows/warehouse.yml): daily EL → `dbt build`, Snowflake creds in repo secrets.
 
-Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
+Auth is **key-pair** (MFA-safe and CI-friendly): generate an RSA key pair, register the public half on your user (`ALTER USER <you> SET RSA_PUBLIC_KEY='...'`), and point `SNOWFLAKE_PRIVATE_KEY_PATH` at the private key. Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
 
 ## Engineering practices
 

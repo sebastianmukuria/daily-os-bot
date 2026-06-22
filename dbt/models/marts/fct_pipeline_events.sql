@@ -13,7 +13,7 @@ select
     e.event_name,
     e.from_status,
     e.to_status,
-    e.trigger,
+    e.event_trigger,
     e.thread_link,
     e.event_at,
     row_number() over (

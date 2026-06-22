@@ -19,4 +19,5 @@ sources:
           - name: source
             tests:
               - accepted_values:
-                  values: ['tasks', 'projects', 'ideas', 'reading', 'habits', 'job_pipeline', 'pipeline_events']
+                  arguments:
+                    values: ['tasks', 'projects', 'ideas', 'reading', 'habits', 'job_pipeline', 'pipeline_events']
