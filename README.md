@@ -178,6 +178,8 @@ Beyond answering messages, the bot pushes scheduled briefings to the same chat �
 - **Morning briefing** (7:30am ET) — today's calendar (across *all* calendars) plus tasks ordered by energy, project check-ins, and stale-task flags.
 - **Midday check** (12:30pm) — done-vs-open count, afternoon events, top remaining tasks.
 - **End-of-day wrap** (6pm) — what got done, what's rolling to tomorrow, tomorrow's calendar.
+- **Week ahead** (Sun 5pm) — the week's calendar by day, interviews/job actions, deadlines, and project check-ins, with a heads-up on the busiest day.
+- **Week in review** (Fri 5pm) — what got done this week, pipeline movement, loose ends (overdue + stale), and a look into next week.
 - **Inbox → Calendar sync** (8am + 6pm) — scans recent mail for flights / hotels / reservations / tickets, extracts them with an LLM (structured output), dedupes against the calendar, and adds them (notifying only when something's created).
 - **DC events scout** (Thu + Sun, 10am) — web-searches and curates local events for the week ahead.
 
