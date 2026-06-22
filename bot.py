@@ -36,6 +36,9 @@ TELEGRAM_MAX_CHARS = 4096
 PIPELINE_POLL_MINUTES = int(os.environ.get("PIPELINE_POLL_MINUTES", "20"))
 PIPELINE_DIGEST_HOUR = int(os.environ.get("PIPELINE_DIGEST_HOUR", "8"))  # ET
 HEALTHCHECK_HOUR = int(os.environ.get("HEALTHCHECK_HOUR", "7"))  # ET; before the digest
+# DC events scout runs Thu + Sun at 10am ET; curation quality matters and it's
+# low-frequency, so it defaults to Sonnet.
+SCOUT_MODEL = os.environ.get("SCOUT_MODEL", "claude-sonnet-4-6")
 # Switch models without code changes: set CLAUDE_MODEL in the environment.
 # Default Haiku (cheap, fast). Bump to claude-sonnet-4-6 for stronger reasoning.
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
@@ -470,6 +473,64 @@ async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("eod_wrap failed")
 
 
+def _generate_dc_events(today) -> str:
+    """Web-search + curate DC events for the next ~10 days; returns the final
+    Telegram HTML message (or '' on failure). Synchronous — call via to_thread."""
+    prompt = (
+        f"Today is {today:%A, %B %-d, %Y}. Scout things to do in Washington, DC for "
+        "Sebastian and his girlfriend over the next 7-10 days.\n\n"
+        "Use web search across varied categories (live music, comedy/theatre, art "
+        "openings, food & drink, farmers markets, outdoor) with the actual current "
+        "date so results are timely. Curate the 6-10 most interesting, varied, "
+        "couple-friendly options: prefer specific dated events, variety across "
+        "categories, free/low-cost highlights, and unique one-offs. Skip tourist "
+        "traps, membership/club events, and kids' events. Do NOT fabricate — only "
+        "include events you actually found.\n\n"
+        "Output ONLY the final Telegram message (no preamble), as HTML using <b> for "
+        "names. Category emojis: 🎭 comedy/theatre · 🎵 music · 🥬 markets · 🎨 art · "
+        "🍺 food/drink · 🌿 outdoor · 🎪 festival. Avoid raw ampersands (write 'and'). "
+        "Format:\n\n"
+        "🗓 <b>DC This Week — [date range]</b>\n\n"
+        "Here's what's on — something for you and your girlfriend:\n\n"
+        "[emoji] <b>Event Name</b>\n[Date + time] · [Venue/Neighborhood]\n[one sentence]\n\n"
+        "[...6-10 events...]\n\n"
+        "<i>Reply to add any of these to your calendar.</i>\n\n"
+        "If it's a quiet week, include fewer and say so."
+    )
+    messages = [{"role": "user", "content": prompt}]
+    resp = None
+    for _ in range(6):  # let server-side web_search run / continue across pause_turn
+        resp = client.messages.create(
+            model=SCOUT_MODEL, max_tokens=1500,
+            tools=[WEB_SEARCH_TOOL], messages=messages,
+        )
+        if resp.stop_reason == "pause_turn":
+            messages.append({"role": "assistant", "content": resp.content})
+            continue
+        break
+    parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+    text = "\n".join(p for p in parts if p).strip()
+    # drop literal divider lines the model sometimes inserts (Telegram won't render them)
+    return "\n".join(ln for ln in text.split("\n") if ln.strip() not in ("---", "—", "***")).strip()
+
+
+async def dc_events_scout(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Thu + Sun 10am ET — curated DC events for the week (web search + LLM)."""
+    now = datetime.now(ZoneInfo("America/New_York"))
+    if now.weekday() not in (3, 6):  # 3=Thursday, 6=Sunday
+        return
+    try:
+        text = await asyncio.to_thread(_generate_dc_events, now.date())
+        if not text:
+            return
+        try:
+            await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        except BadRequest:
+            await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text)  # HTML fallback
+    except Exception:
+        logger.exception("dc_events_scout failed")
+
+
 async def gmail_healthcheck(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Confirm Gmail auth still works; alert on Telegram if it's broken (e.g. an
     expired/revoked token) so an outage surfaces in minutes, not days. Runs once
@@ -570,6 +631,7 @@ def main() -> None:
         app.job_queue.run_daily(morning_briefing, time=dtime(7, 30, tzinfo=ET))
         app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
         app.job_queue.run_daily(eod_wrap, time=dtime(18, 0, tzinfo=ET))
+        app.job_queue.run_daily(dc_events_scout, time=dtime(10, 0, tzinfo=ET))  # gated to Thu+Sun
         # Gmail auth health check: verify on startup, then daily.
         app.job_queue.run_once(gmail_healthcheck, when=60)
         app.job_queue.run_daily(
