@@ -154,3 +154,95 @@ def format_eod(done_today: list, rolling: list, tomorrow_events: list, today: da
     if stale:
         lines += ["", f"⚠️ {len(stale)} task(s) stale 3+ days — timebox one tomorrow or drop it."]
     return "\n".join(lines)
+
+
+def _weekday_prefix(date_iso: str) -> str:
+    """'Mon · ' from an ISO date, or '' if missing/unparseable."""
+    if not date_iso:
+        return ""
+    try:
+        return date.fromisoformat(date_iso[:10]).strftime("%a") + " · "
+    except ValueError:
+        return ""
+
+
+def _calendar_block(days: list) -> list:
+    """Day-grouped event lines (only days that have events)."""
+    out = []
+    for d in days:
+        if not d["events"]:
+            continue
+        out.append(f"<b>{d['label']}</b>")
+        out += [_fmt_event(e) for e in d["events"]]
+    return out
+
+
+def format_week_start(cal: dict, due_tasks: list, job_actions: list, checkins: list, range_label: str) -> str:
+    lines = [f"🗓 <b>Week Ahead — {range_label}</b>", "", "📅 <b>Your week</b>"]
+    cal_lines = _calendar_block(cal["days"])
+    lines += cal_lines if cal_lines else ["Nothing scheduled yet."]
+
+    if job_actions:
+        lines += ["", "🎯 <b>Interviews & job actions</b>"]
+        for j in job_actions:
+            role = f" — {_esc(j['role'])}" if j.get("role") else ""
+            lines.append(f"• {_weekday_prefix(j.get('next_action_due'))}{_esc(j.get('company', ''))}{role} ({_esc(j.get('status', ''))})")
+
+    if due_tasks:
+        lines += ["", "⏰ <b>Due this week</b>"]
+        lines += [f"• {_weekday_prefix(t.get('due_date'))}{_esc(t['name'])}" for t in due_tasks]
+
+    if checkins:
+        lines += ["", "🔁 <b>Project check-ins</b>"]
+        lines += [f"• {_weekday_prefix(c.get('next_check_in'))}{_esc(c['name'])}" for c in checkins]
+
+    busiest = max(cal["days"], key=lambda d: len(d["events"]), default=None)
+    extras = []
+    if cal["total"]:
+        extras.append(f"{cal['total']} events")
+    if busiest and len(busiest["events"]) >= 3:
+        extras.append(f"busiest {busiest['label']} ({len(busiest['events'])})")
+    if due_tasks:
+        extras.append(f"{len(due_tasks)} due")
+    if extras:
+        lines += ["", f"<i>Heads up: {' · '.join(extras)}</i>"]
+    return "\n".join(lines)
+
+
+def format_week_end(done: list, pipeline_events: list, next_cal: dict, overdue: list,
+                    stale_count: int, upcoming_actions: list, range_label: str) -> str:
+    lines = [f"🌅 <b>Week in Review — {range_label}</b>", "", "✅ <b>Wins this week</b>"]
+    if done:
+        lines.append(f"{len(done)} task(s) done:")
+        lines += [f"• {_esc(n)}" for n in done[:8]]
+        if len(done) > 8:
+            lines.append(f"<i>+{len(done) - 8} more</i>")
+    else:
+        lines.append("Nothing marked done — log what you finished in Notion.")
+
+    lines += ["", "📊 <b>Pipeline this week</b>"]
+    if pipeline_events:
+        counts: dict = {}
+        for e in pipeline_events:
+            s = e.get("to_status")
+            if s:
+                counts[s] = counts.get(s, 0) + 1
+        summ = ", ".join(f"{n} {s}" for s, n in sorted(counts.items(), key=lambda x: -x[1]))
+        lines.append(f"{len(pipeline_events)} update(s)" + (f": {summ}" if summ else ""))
+    else:
+        lines.append("No pipeline movement this week.")
+
+    ends = [f"• Overdue: {_esc(t['name'])} (due {t.get('due_date', '')})" for t in overdue[:5]]
+    if stale_count:
+        ends.append(f"• {stale_count} stale task(s) waiting")
+    if ends:
+        lines += ["", "⚠️ <b>Loose ends</b>"] + ends
+
+    nxt = _calendar_block(next_cal["days"])
+    for j in upcoming_actions:
+        nxt.append(f"🎯 {_weekday_prefix(j.get('next_action_due'))}{_esc(j.get('company', ''))} ({_esc(j.get('status', ''))})")
+    if nxt:
+        lines += ["", "🔜 <b>Heading into next week</b>"] + nxt
+
+    lines += ["", "<i>Have a good weekend.</i>"]
+    return "\n".join(lines)

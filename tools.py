@@ -1316,6 +1316,8 @@ def get_events_for_day(offset_days: int = 0) -> dict:
             logger.warning("calendar fetch failed for %s", cid)
             continue
         for e in res.get("items", []):
+            if e.get("eventType") == "workingLocation":
+                continue  # skip Google "working location" (Home/Office) noise
             dt = e["start"].get("dateTime")
             if dt:
                 t = datetime.fromisoformat(dt).astimezone(et)
@@ -1332,6 +1334,87 @@ def get_events_for_day(offset_days: int = 0) -> dict:
             })
     events.sort(key=lambda x: x["sort_key"])
     return {"events": events, "date": day.isoformat()}
+
+
+def get_events_for_range(start_offset_days: int = 0, num_days: int = 7) -> dict:
+    """All-calendar events over a multi-day window, grouped by local day (ET),
+    including all-day events. Returns {days: [{date, label, events:[...]}], total}.
+    Every day in the window is present (events=[] when free)."""
+    service = _get_calendar_service()
+    et = pytz.timezone(ET)
+    first = (datetime.now(et) + timedelta(days=start_offset_days)).date()
+    start = et.localize(datetime(first.year, first.month, first.day, 0, 0))
+    end = start + timedelta(days=num_days)
+
+    by_day: dict = {}
+    for cid, cname in _event_calendar_ids(service):
+        try:
+            res = service.events().list(
+                calendarId=cid, timeMin=start.isoformat(), timeMax=end.isoformat(),
+                singleEvents=True, orderBy="startTime", maxResults=100,
+            ).execute()
+        except Exception:
+            logger.warning("calendar fetch failed for %s", cid)
+            continue
+        for e in res.get("items", []):
+            if e.get("eventType") == "workingLocation":
+                continue  # skip Google "working location" (Home/Office) noise
+            dt = e["start"].get("dateTime")
+            if dt:
+                t = datetime.fromisoformat(dt).astimezone(et)
+                d, time_str, sort_key, all_day = t.date(), t.strftime("%-I:%M%p").lower(), t.strftime("%H:%M"), False
+            else:
+                d = datetime.fromisoformat(e["start"].get("date")).date()
+                time_str, sort_key, all_day = "all day", "00:00", True
+            by_day.setdefault(d.isoformat(), []).append({
+                "summary": e.get("summary", "(no title)"), "time_str": time_str,
+                "sort_key": sort_key, "all_day": all_day,
+                "location": e.get("location", ""), "calendar": cname,
+            })
+
+    days = []
+    for i in range(num_days):
+        d = (start + timedelta(days=i)).date()
+        evs = sorted(by_day.get(d.isoformat(), []), key=lambda x: x["sort_key"])
+        days.append({"date": d.isoformat(), "label": d.strftime("%a %b %-d"), "events": evs})
+    return {"days": days, "total": sum(len(x["events"]) for x in days)}
+
+
+async def get_tasks_done_this_week() -> list:
+    """Names of tasks marked Done whose last edit was in the past 7 days (ET)."""
+    res = await notion.data_sources.query(
+        data_source_id=TASKS_DS_ID,
+        filter={"property": "Status", "select": {"equals": STATUS_DONE}},
+    )
+    et = pytz.timezone(ET)
+    cutoff = datetime.now(et).date() - timedelta(days=7)
+    out = []
+    for page in res.get("results", []):
+        edited = datetime.fromisoformat(
+            page["last_edited_time"].replace("Z", "+00:00")
+        ).astimezone(et).date()
+        if edited >= cutoff:
+            out.append(_title(page["properties"], "Task"))
+    return out
+
+
+async def get_pipeline_events_since(days: int = 7) -> list:
+    """Pipeline transition events in the last `days` days — [{event, to_status, timestamp}]."""
+    et = pytz.timezone(ET)
+    cutoff = (datetime.now(et).date() - timedelta(days=days)).isoformat()
+    res = await notion.data_sources.query(
+        data_source_id=PIPELINE_EVENTS_DS_ID,
+        filter={"property": "Timestamp", "date": {"on_or_after": cutoff}},
+    )
+    out = []
+    for page in res.get("results", []):
+        p = page["properties"]
+        out.append({
+            "event": _title(p, "Event"),
+            "to_status": _rich_text(p, "To Status"),
+            "timestamp": _date(p, "Timestamp"),
+        })
+    return out
 
 
 # --- Habits ---

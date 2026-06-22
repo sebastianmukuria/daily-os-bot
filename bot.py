@@ -5,7 +5,7 @@ import html
 import time
 import asyncio
 import logging
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 from zoneinfo import ZoneInfo
 import pytz
 from dotenv import load_dotenv
@@ -552,6 +552,54 @@ async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("eod_wrap failed")
 
 
+async def week_start_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sunday 5pm ET — the week ahead: calendar, interviews/job actions, deadlines, check-ins."""
+    now = datetime.now(ZoneInfo("America/New_York"))
+    if now.weekday() != 6:  # Sunday
+        return
+    import tools, briefings
+    try:
+        cal = await asyncio.to_thread(tools.get_events_for_range, 1, 7)  # Mon–Sun
+        ws = (now.date() + timedelta(days=1)).isoformat()
+        we = (now.date() + timedelta(days=7)).isoformat()
+        tasks = (await tools._get_tasks())["tasks"]
+        due_tasks = [t for t in tasks if t.get("due_date") and ws <= t["due_date"] <= we]
+        apps = (await tools._get_pipeline()).get("applications", [])
+        job_actions = [a for a in apps if a.get("next_action_due") and ws <= a["next_action_due"] <= we]
+        projects = (await tools._get_projects()).get("projects", [])
+        checkins = [p for p in projects if p.get("next_check_in") and ws <= p["next_check_in"] <= we]
+        label = f"{(now.date() + timedelta(days=1)):%b %-d} – {(now.date() + timedelta(days=7)):%b %-d}"
+        text = briefings.format_week_start(cal, due_tasks, job_actions, checkins, label)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logger.exception("week_start_roundup failed")
+
+
+async def week_end_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Friday 5pm ET — week in review + a look into next week."""
+    now = datetime.now(ZoneInfo("America/New_York"))
+    if now.weekday() != 4:  # Friday
+        return
+    import tools, briefings
+    try:
+        done = await tools.get_tasks_done_this_week()
+        events = await tools.get_pipeline_events_since(7)
+        next_cal = await asyncio.to_thread(tools.get_events_for_range, 1, 5)  # Sat–Wed
+        tasks = (await tools._get_tasks())["tasks"]
+        today = now.date().isoformat()
+        overdue = [t for t in tasks if t.get("due_date") and t["due_date"] < today]
+        stale_count = sum(1 for t in tasks if t.get("stale"))
+        apps = (await tools._get_pipeline()).get("applications", [])
+        ns = (now.date() + timedelta(days=1)).isoformat()
+        ne = (now.date() + timedelta(days=10)).isoformat()
+        upcoming = [a for a in apps if a.get("next_action_due") and ns <= a["next_action_due"] <= ne]
+        label = f"{(now.date() - timedelta(days=4)):%b %-d} – {now.date():%b %-d}"
+        text = briefings.format_week_end(done, events, next_cal, overdue, stale_count, upcoming, label)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logger.exception("week_end_roundup failed")
+
+
 def _generate_dc_events(today) -> str:
     """Web-search + curate DC events for the next ~10 days; returns the final
     Telegram HTML message (or '' on failure). Synchronous — call via to_thread."""
@@ -768,6 +816,8 @@ def main() -> None:
         app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
         app.job_queue.run_daily(eod_wrap, time=dtime(18, 0, tzinfo=ET))
         app.job_queue.run_daily(dc_events_scout, time=dtime(10, 0, tzinfo=ET))  # gated to Thu+Sun
+        app.job_queue.run_daily(week_start_roundup, time=dtime(17, 0, tzinfo=ET))  # gated to Sunday
+        app.job_queue.run_daily(week_end_roundup, time=dtime(17, 0, tzinfo=ET))    # gated to Friday
         app.job_queue.run_daily(inbox_calendar_sync, time=dtime(8, 0, tzinfo=ET))
         app.job_queue.run_daily(inbox_calendar_sync, time=dtime(18, 5, tzinfo=ET))
         # Gmail auth health check: verify on startup, then daily.
