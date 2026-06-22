@@ -834,22 +834,26 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     result = await notion.data_sources.query(**params)
 
     energy_order = {"High": 0, "Medium": 1, "Low": 2}
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(pytz.timezone(ET)).date()
     tasks = []
 
     for page in result.get("results", []):
         props = page["properties"]
         energy = _normalize_energy(_select(props, "Energy"))
-        last_edited = datetime.fromisoformat(
-            page["last_edited_time"].replace("Z", "+00:00")
+        created = datetime.fromisoformat(
+            page["created_time"].replace("Z", "+00:00")
         ).date()
-        stale = _checkbox(props, "Stale") or (today - last_edited).days >= 3
+        rolling_days = (today - created).days  # how long it's been open
+        stale = _checkbox(props, "Stale") or rolling_days >= 3
 
         tasks.append({
+            "id": page["id"],
             "name": _title(props, "Task"),
             "energy": energy,
+            "type": _select(props, "Type"),
             "status": _select(props, "Status"),
             "due_date": _date(props, "Due Date"),
+            "rolling_days": rolling_days,
             "stale": stale,
         })
 
@@ -1237,6 +1241,69 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
 
     events.sort(key=lambda x: x["start"])
     return {"events": events, "count": len(events)}
+
+
+# --- Briefing helpers ---
+
+async def get_tasks_done_today() -> list:
+    """Names of tasks marked Done whose last edit was today (ET) — the EOD 'wins'.
+    Notion has no completion timestamp, so last-edited is the accepted proxy."""
+    res = await notion.data_sources.query(
+        data_source_id=TASKS_DS_ID,
+        filter={"property": "Status", "select": {"equals": STATUS_DONE}},
+    )
+    et = pytz.timezone(ET)
+    today = datetime.now(et).date()
+    out = []
+    for page in res.get("results", []):
+        edited = datetime.fromisoformat(page["last_edited_time"].replace("Z", "+00:00"))
+        if edited.astimezone(et).date() == today:
+            out.append(_title(page["properties"], "Task"))
+    return out
+
+
+async def set_task_stale(page_id: str) -> None:
+    """Mark a task's Stale checkbox (used by the morning briefing)."""
+    await notion.pages.update(page_id=page_id, properties={"Stale": {"checkbox": True}})
+
+
+def get_events_for_day(offset_days: int = 0) -> dict:
+    """All-calendar events for one day (today + offset), midnight→midnight ET,
+    including all-day events. Returns {events: [...], date}. Each event has
+    summary, time_str, sort_key (HH:MM), all_day, location, calendar."""
+    service = _get_calendar_service()
+    et = pytz.timezone(ET)
+    day = (datetime.now(et) + timedelta(days=offset_days)).date()
+    start = et.localize(datetime(day.year, day.month, day.day, 0, 0))
+    end = start + timedelta(days=1)
+
+    events = []
+    for cid, cname in _event_calendar_ids(service):
+        try:
+            res = service.events().list(
+                calendarId=cid, timeMin=start.isoformat(), timeMax=end.isoformat(),
+                singleEvents=True, orderBy="startTime", maxResults=25,
+            ).execute()
+        except Exception:
+            logger.warning("calendar fetch failed for %s", cid)
+            continue
+        for e in res.get("items", []):
+            dt = e["start"].get("dateTime")
+            if dt:
+                t = datetime.fromisoformat(dt).astimezone(et)
+                time_str, sort_key, all_day = t.strftime("%-I:%M%p").lower(), t.strftime("%H:%M"), False
+            else:
+                time_str, sort_key, all_day = "all day", "00:00", True
+            events.append({
+                "summary": e.get("summary", "(no title)"),
+                "time_str": time_str,
+                "sort_key": sort_key,
+                "all_day": all_day,
+                "location": e.get("location", ""),
+                "calendar": cname,
+            })
+    events.sort(key=lambda x: x["sort_key"])
+    return {"events": events, "date": day.isoformat()}
 
 
 # --- Habits ---

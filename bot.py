@@ -421,6 +421,55 @@ async def pipeline_daily(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("pipeline_daily failed")
 
 
+async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """7:30am ET — calendar + energy-sorted tasks + project check-ins + stale flags."""
+    import tools, briefings
+    try:
+        tasks = (await tools._get_tasks())["tasks"]
+        for t in tasks:  # persist the stale flag back to Notion
+            if t["stale"]:
+                try:
+                    await tools.set_task_stale(t["id"])
+                except Exception:
+                    pass
+        events = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
+        today = datetime.now(ZoneInfo("America/New_York")).date()
+        text = briefings.format_morning(tasks, events, today)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logger.exception("morning_briefing failed")
+
+
+async def midday_check(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """12:30pm ET — progress (done vs open), afternoon events, top remaining tasks."""
+    import tools, briefings
+    try:
+        tasks = (await tools._get_tasks())["tasks"]
+        done_count = len(await tools.get_tasks_done_today())
+        now = datetime.now(ZoneInfo("America/New_York"))
+        all_today = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
+        nowhm = now.strftime("%H:%M")
+        afternoon = [e for e in all_today if not e["all_day"] and e["sort_key"] >= nowhm]
+        text = briefings.format_midday(tasks, done_count, afternoon, now.date())
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logger.exception("midday_check failed")
+
+
+async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """6pm ET — what got done today, what's rolling, tomorrow's calendar."""
+    import tools, briefings
+    try:
+        done = await tools.get_tasks_done_today()
+        rolling = (await tools._get_tasks())["tasks"]
+        tomorrow = (await asyncio.to_thread(tools.get_events_for_day, 1))["events"]
+        today = datetime.now(ZoneInfo("America/New_York")).date()
+        text = briefings.format_eod(done, rolling, tomorrow, today)
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+    except Exception:
+        logger.exception("eod_wrap failed")
+
+
 async def gmail_healthcheck(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Confirm Gmail auth still works; alert on Telegram if it's broken (e.g. an
     expired/revoked token) so an outage surfaces in minutes, not days. Runs once
@@ -516,6 +565,11 @@ def main() -> None:
             time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
         )
         app.job_queue.run_repeating(interview_watch, interval=3600, first=90)
+        # Daily briefings (moved in-house from cowork).
+        ET = ZoneInfo("America/New_York")
+        app.job_queue.run_daily(morning_briefing, time=dtime(7, 30, tzinfo=ET))
+        app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
+        app.job_queue.run_daily(eod_wrap, time=dtime(18, 0, tzinfo=ET))
         # Gmail auth health check: verify on startup, then daily.
         app.job_queue.run_once(gmail_healthcheck, when=60)
         app.job_queue.run_daily(
