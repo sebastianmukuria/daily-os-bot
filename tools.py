@@ -381,7 +381,12 @@ TOOLS = [
                 },
                 "due_date": {
                     "type": "string",
-                    "description": "Due date in YYYY-MM-DD format (optional)",
+                    "description": (
+                        "Due date YYYY-MM-DD. Optional, but don't leave it blank when timing "
+                        "matters: infer it from deadlines/urgency cues in his wording (compute "
+                        "from the current date), or omit and ask him first for a time-sensitive "
+                        "task you can't date confidently. Fine to omit for low-stakes someday tasks."
+                    ),
                 },
             },
             "required": ["name"],
