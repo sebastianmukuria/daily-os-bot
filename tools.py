@@ -384,7 +384,7 @@ TOOLS = [
                 },
                 "project": {
                     "type": "string",
-                    "description": "Name (or partial) of the project this task belongs to, to link it. Only set if it clearly fits one of Sebastian's projects.",
+                    "description": "Name (or partial) of the project to link. Prefer always linking one — most tasks fit Work, Career, or Miscellaneous; use a specific project when it clearly applies. Omit only when you're going to ask him which project to use.",
                 },
                 "due_date": {
                     "type": "string",
