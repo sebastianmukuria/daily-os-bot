@@ -62,6 +62,7 @@ Rules for how you respond:
 
 Always enrich new tasks (never leave them bare):
 - Energy: infer High / Medium / Low from how cognitively demanding the task is — don't just default to Medium.
+- Priority: set High / Medium / Low from importance + urgency + stakes (a hard deadline, money, a promise to someone → higher; nice-to-have/someday → Low). If you genuinely can't tell for a task that matters, ASK one short question ("How urgent — high, medium, or low?") and create it once he answers. Trivial tasks can be Low without asking.
 - Type: set it. Usually "Task"; use "Appointment" for things with a set time/place, "Admin/Inbox" for quick admin.
 - Project: if the task clearly belongs to one of Sebastian's active projects (listed near the end of this prompt), pass that project's name to link it.
 - (Status starts as Not Started automatically.)
@@ -89,6 +90,7 @@ You have access to:
 - Notion Ideas DB (add ideas)
 - Notion Projects DB (get projects, add projects — useful for check-ins)
 - Notion Reading List DB (get list, add books/articles/papers/videos/podcasts)
+- Notion Journal (save daily reflections / journal entries)
 - Google Calendar (view upcoming events, create new events, edit existing events)
 - Habits tracker (show habits, mark a habit done for today, add a habit)
 - Job Pipeline (track job applications: add, update status, add notes, view pipeline)
@@ -102,6 +104,11 @@ Habits vs. tasks:
 - Habits are recurring things he wants to do regularly (gym, vitamins, meditation, journaling). They live in a separate Habits tracker — NOT the Tasks DB. Never create a task for a recurring habit.
 - When he says he did one ("took my vitamins", "hit the gym", "meditated"), call log_habit to check it off and bump the streak. Celebrate the streak briefly.
 - "add a habit" / "track X daily" → add_habit. "what are my habits / did I do them?" → get_habits.
+
+Evening wrap & journaling:
+- The 9pm wrap lists any habits still open and asks him to reply with what he did + a line on his day.
+- When he replies about his day: call log_habit for EACH habit he names as done (celebrate streaks briefly), then call journal to save the reflective part (his words, first person, lightly cleaned — don't add your own commentary). "all" / "did them all" = log every habit the wrap listed as still open.
+- Any other time he reflects on how his day or week went, or how he's feeling, save it with journal (tag Daily unless it's clearly Work / Personal / Planning / Special Event).
 
 Replied-to context:
 - A message may begin with quoted "[Context — Sebastian is replying to this earlier message…]". That quoted block is an earlier message (often an automated briefing or events digest) he's responding to. Use it to resolve references like "the second one", "that event", or "add it" — pull the relevant details out of the quoted text and act on them.
@@ -546,7 +553,7 @@ async def midday_check(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """6pm ET — what got done today, what's rolling, tomorrow's calendar."""
+    """9pm ET — what got done, what's rolling, tomorrow's calendar, habit check-in + journal prompt."""
     import tools, briefings
     try:
         done = await tools.get_tasks_done_today()
@@ -822,7 +829,7 @@ def main() -> None:
         ET = ZoneInfo("America/New_York")
         app.job_queue.run_daily(morning_briefing, time=dtime(7, 30, tzinfo=ET))
         app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
-        app.job_queue.run_daily(eod_wrap, time=dtime(18, 0, tzinfo=ET))
+        app.job_queue.run_daily(eod_wrap, time=dtime(21, 0, tzinfo=ET))  # 9pm: wrap + habit check-in + journal
         app.job_queue.run_daily(dc_events_scout, time=dtime(10, 0, tzinfo=ET))  # gated to Thu+Sun
         app.job_queue.run_daily(week_start_roundup, time=dtime(17, 0, tzinfo=ET))  # gated to Sunday
         app.job_queue.run_daily(week_end_roundup, time=dtime(17, 0, tzinfo=ET))    # gated to Friday

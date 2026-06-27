@@ -127,6 +127,28 @@ def test_week_end_quiet():
     assert "Heading into next week" not in out
 
 
+def test_morning_high_priority_callout():
+    tasks = [
+        {"id": "1", "name": "Pay rent", "energy": "Low", "priority": "High", "type": "Task", "due_date": None, "rolling_days": 0, "stale": False},
+        {"id": "2", "name": "Read article", "energy": "Low", "priority": "Low", "type": "Task", "due_date": None, "rolling_days": 0, "stale": False},
+    ]
+    out = format_morning(tasks, [], TODAY)
+    assert "High Priority" in out and "Pay rent" in out
+    assert out.index("High Priority") < out.index("Low Energy")   # callout sits above energy sections
+
+
+def test_morning_no_callout_without_high_priority():
+    tasks = [{"id": "1", "name": "Read article", "energy": "Low", "priority": "Low", "type": "Task", "due_date": None, "rolling_days": 0, "stale": False}]
+    assert "High Priority" not in format_morning(tasks, [], TODAY)
+
+
+def test_eod_journal_prompt():
+    out_open = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": True}])
+    assert "Before bed" in out_open and "habits you did" in out_open
+    out_done = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": False}])
+    assert "Before bed" in out_done and "habits you did" not in out_done and "how today went" in out_done
+
+
 def _run():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

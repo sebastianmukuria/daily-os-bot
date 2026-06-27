@@ -66,6 +66,14 @@ def format_morning(tasks: list, events: list, today: date, habits: list = None) 
     visible = ordered[:MAX_BRIEFING_TASKS]
     hidden = len(ordered) - len(visible)
 
+    # High-priority callout — surfaced up top regardless of energy, so important
+    # things don't get buried in the Low-energy section.
+    high_priority = [t for t in ordered if t.get("priority") == "High"]
+    if high_priority:
+        lines.append("‼️ <b>High Priority — do regardless of energy</b>")
+        lines += [_task_line(t, today_iso) for t in high_priority[:MAX_BRIEFING_TASKS]]
+        lines.append("")
+
     # High Energy — always shown (clear-runway empty state)
     high = [t for t in visible if t.get("energy") == "High"]
     lines.append("⚡ <b>High Energy — do these first</b>")
@@ -153,6 +161,14 @@ def format_eod(done_today: list, rolling: list, tomorrow_events: list, today: da
     stale = [t for t in rolling if t.get("stale")]
     if stale:
         lines += ["", f"⚠️ {len(stale)} task(s) stale 3+ days — timebox one tomorrow or drop it."]
+
+    # Interactive close — the 9pm wrap is the one habit-logging + journaling moment.
+    lines += ["", "📝 <b>Before bed</b>"]
+    if missed_habits:
+        lines.append("Reply with the habits you did (or “all”), plus a line on how today "
+                     "went — I’ll update your streaks and save it to your journal.")
+    else:
+        lines.append("Reply with a line on how today went and I’ll save it to your journal.")
     return "\n".join(lines)
 
 

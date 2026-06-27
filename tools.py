@@ -29,6 +29,7 @@ IDEAS_DS_ID = "b70516f3-6782-4256-837e-85bb5ce11b62"
 PROJECTS_DS_ID = "c99375ae-b7d5-4225-bd45-fe7e204c4e9c"
 READING_DS_ID = "29aba34c-4a58-4096-8c7f-f649976e7639"
 HABITS_DS_ID = "818e9cd3-48a1-413e-9d38-aa74c6b4e480"
+JOURNAL_DS_ID = "4a46d7bc-583c-4b04-9a60-346a5ab06c3f"
 JOB_PIPELINE_DS_ID = "551e0098-cf2f-41eb-8dff-437501636fbe"
 PIPELINE_EVENTS_DS_ID = "bf426aeb-7a4c-45d5-83ac-7155e28cca79"
 
@@ -44,6 +45,7 @@ PIPELINE_STATUS_ORDER = {s: i for i, s in enumerate(
 
 # Real select option names in the Notion DBs (with emoji prefixes)
 ENERGY_MAP = {"High": "⚡ High", "Medium": "🔋 Medium", "Low": "🪫 Low"}
+PRIORITY_MAP = {"High": "🔴 High", "Medium": "🟠 Medium", "Low": "🟢 Low"}
 STATUS_MAP = {
     "Not Started": "🔴 Not Started",
     "In Progress": "🟡 In Progress",
@@ -370,6 +372,11 @@ TOOLS = [
                     "description": "Infer from how cognitively demanding the task is. Default: Medium",
                     "enum": ["High", "Medium", "Low"],
                 },
+                "priority": {
+                    "type": "string",
+                    "description": "Importance/urgency: infer from stakes + deadline. Ask one short question if you truly can't tell for a task that matters; Low is fine for trivial ones.",
+                    "enum": ["High", "Medium", "Low"],
+                },
                 "type": {
                     "type": "string",
                     "description": "Task type. Use 'Appointment' for things with a set time/place, 'Admin/Inbox' for quick admin. Default: Task",
@@ -416,7 +423,7 @@ TOOLS = [
             "energy, due date, status, name, or notes. Finds the task by name (partial "
             "match is fine). Only the fields you pass are changed. Use this instead of "
             "creating a new task when Sebastian wants to modify one that already exists "
-            "(e.g. 'make that high energy', 'push it to Friday', 'mark it in progress')."
+            "(e.g. 'make that high energy', 'bump its priority', 'push it to Friday', 'mark it in progress')."
         ),
         "input_schema": {
             "type": "object",
@@ -429,6 +436,11 @@ TOOLS = [
                 "energy": {
                     "type": "string",
                     "description": "New energy level (optional)",
+                    "enum": ["High", "Medium", "Low"],
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "New priority (optional)",
                     "enum": ["High", "Medium", "Low"],
                 },
                 "due_date": {
@@ -646,6 +658,28 @@ TOOLS = [
         },
     },
     {
+        "name": "journal",
+        "description": (
+            "Save a journal entry to Sebastian's Notion 📝 Journal. Use when he reflects "
+            "on his day — how it went, what he did, how he feels — especially in reply to "
+            "the evening wrap. Pass his words as the entry (first person, lightly cleaned "
+            "up; don't editorialize). Tags default to ['Daily']."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry": {"type": "string", "description": "The journal entry text (his reflection, first person)"},
+                "title": {"type": "string", "description": "Optional short title; defaults to today's date"},
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["Daily", "Special Event", "Work", "Personal", "Planning"]},
+                    "description": "Optional tags; defaults to ['Daily']",
+                },
+            },
+            "required": ["entry"],
+        },
+    },
+    {
         "name": "get_pipeline",
         "description": "Get Sebastian's job applications from the Job Pipeline, optionally filtered by status.",
         "input_schema": {
@@ -754,6 +788,7 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
             due_date=inputs.get("due_date"),
             type=inputs.get("type", "Task"),
             project=inputs.get("project"),
+            priority=inputs.get("priority"),
         )
     elif name == "complete_task":
         return await _complete_task(task_name=inputs["task_name"])
@@ -765,6 +800,7 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
             due_date=inputs.get("due_date"),
             status=inputs.get("status"),
             notes=inputs.get("notes"),
+            priority=inputs.get("priority"),
         )
     elif name == "add_idea":
         return await _add_idea(
@@ -818,6 +854,12 @@ async def _dispatch_tool(name: str, inputs: dict) -> Any:
         return await _log_habit(habit_name=inputs["habit_name"])
     elif name == "add_habit":
         return await _add_habit(name=inputs["name"], cadence=inputs.get("cadence", "Daily"))
+    elif name == "journal":
+        return await _add_journal_entry(
+            entry=inputs["entry"],
+            title=inputs.get("title"),
+            tags=inputs.get("tags"),
+        )
     elif name == "get_pipeline":
         return await _get_pipeline(status=inputs.get("status"))
     elif name == "add_application":
@@ -869,6 +911,7 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     for page in result.get("results", []):
         props = page["properties"]
         energy = _normalize_energy(_select(props, "Energy"))
+        priority = _normalize_priority(_select(props, "Priority"))
         created = datetime.fromisoformat(
             page["created_time"].replace("Z", "+00:00")
         ).date()
@@ -883,6 +926,7 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
             "id": page["id"],
             "name": _title(props, "Task"),
             "energy": energy,
+            "priority": priority,
             "type": _select(props, "Type"),
             "status": _select(props, "Status"),
             "due_date": due_date,
@@ -932,6 +976,7 @@ async def _create_task(
     due_date: str = None,
     type: str = "Task",
     project: str = None,
+    priority: str = None,
 ) -> dict:
     properties: dict = {
         "Task": {"title": [{"text": {"content": name}}]},
@@ -939,6 +984,8 @@ async def _create_task(
         "Status": {"select": {"name": STATUS_NOT_STARTED}},
         "Type": {"select": {"name": type}},
     }
+    if priority:
+        properties["Priority"] = {"select": {"name": PRIORITY_MAP.get(priority, priority)}}
     if due_date:
         properties["Due Date"] = {"date": {"start": due_date}}
 
@@ -958,6 +1005,7 @@ async def _create_task(
         "id": page["id"],
         "name": name,
         "energy": energy,
+        "priority": priority,
         "type": type,
         "project": linked_project,
     }
@@ -989,6 +1037,7 @@ async def _update_task(
     due_date: str = None,
     status: str = None,
     notes: str = None,
+    priority: str = None,
 ) -> dict:
     """Edit an existing task — only the fields provided are changed."""
     page = await _find_task(task_name)
@@ -1001,6 +1050,8 @@ async def _update_task(
         properties["Task"] = {"title": [{"text": {"content": new_name}}]}
     if energy is not None:
         properties["Energy"] = {"select": {"name": ENERGY_MAP.get(energy, energy)}}
+    if priority is not None:
+        properties["Priority"] = {"select": {"name": PRIORITY_MAP.get(priority, priority)}}
     if status is not None:
         properties["Status"] = {"select": {"name": STATUS_MAP.get(status, status)}}
     if due_date is not None:
@@ -1505,6 +1556,29 @@ async def _add_habit(name: str, cadence: str = "Daily") -> dict:
     return {"success": True, "id": page["id"], "name": name, "cadence": cadence}
 
 
+# --- Journal ---
+
+async def _add_journal_entry(entry: str, title: str = None, tags: list = None) -> dict:
+    """Append an entry to the Notion 📝 Journal DB (entry text lands as the page body)."""
+    now = datetime.now(pytz.timezone(ET))
+    if not title:
+        title = now.strftime("%A, %B %-d")  # e.g. "Saturday, June 27"
+    tag_names = tags or ["Daily"]
+    page = await notion.pages.create(
+        parent={"type": "data_source_id", "data_source_id": JOURNAL_DS_ID},
+        properties={
+            "Name": {"title": [{"text": {"content": title}}]},
+            "Tags": {"multi_select": [{"name": t} for t in tag_names]},
+        },
+        children=[{
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {"rich_text": [{"type": "text", "text": {"content": entry}}]},
+        }],
+    )
+    return {"success": True, "id": page["id"], "title": title}
+
+
 # --- Job Pipeline ---
 
 def _today_et() -> str:
@@ -1730,6 +1804,16 @@ def _date(props: dict, key: str) -> str | None:
 
 def _normalize_energy(value: str | None) -> str | None:
     """Map '⚡ High' / '🔋 Medium' / '🪫 Low' back to plain High/Medium/Low."""
+    if not value:
+        return None
+    for plain in ("High", "Medium", "Low"):
+        if plain in value:
+            return plain
+    return value
+
+
+def _normalize_priority(value: str | None) -> str | None:
+    """Map '🔴 High' / '🟠 Medium' / '🟢 Low' back to plain High/Medium/Low."""
     if not value:
         return None
     for plain in ("High", "Medium", "Low"):
