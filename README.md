@@ -3,9 +3,13 @@
 [![Pipeline tests](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml)
 [![Warehouse refresh](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml)
 
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white) ![Claude](https://img.shields.io/badge/Claude-Anthropic-D97757?logo=anthropic&logoColor=white) ![Snowflake](https://img.shields.io/badge/Snowflake-warehouse-29B5E8?logo=snowflake&logoColor=white) ![dbt](https://img.shields.io/badge/dbt-transform-FF694B?logo=dbt&logoColor=white) ![Evidence](https://img.shields.io/badge/Evidence-BI--as--code-A78BFA) ![Notion](https://img.shields.io/badge/Notion-operational%20store-000000?logo=notion&logoColor=white) ![Telegram](https://img.shields.io/badge/Telegram-interface-26A5E4?logo=telegram&logoColor=white)
+
 A personal AI assistant that runs your life ops over Telegram — powered by Claude, backed by [Notion](https://notion.so), Google Calendar, and Gmail. Message it in plain English and it manages tasks, projects, habits, reading lists, and calendar events. In the background, it **automatically tracks your job search by reading your inbox**: every application, interview invite, and rejection becomes a structured, queryable pipeline in Notion — no manual status updates.
 
 Built ADHD-first: tasks ordered by energy level, smallest-next-step framing, a few fixed check-in windows instead of random pings, and proactive "want me to time-block this?" prompts.
+
+> **Also a modern data-stack portfolio piece.** Under the hood, all seven Notion databases flow through a **Notion → Snowflake (VARIANT) → dbt → Evidence** ELT pipeline — version-controlled, tested, documented SQL, orchestrated daily in CI. Jump to [Analytics warehouse →](#analytics-warehouse-snowflake--dbt)
 
 ```
 You:  add: call the dentist, low energy
@@ -92,17 +96,17 @@ The most engineering-dense part of the repo — an email-driven ETL pipeline wit
 
 Notion is the operational store; for analytics the data is modeled in a proper warehouse using the modern **ELT** stack — extract-load raw, then transform in-warehouse with version-controlled, tested SQL.
 
-```
-Notion ──(el_notion.py)──▶ Snowflake RAW ──(dbt)──▶ STAGING ──(dbt)──▶ MARTS
-         every page as                cast + rename        fct_/mart_ + tests
-         VARIANT JSON                 (one stg_ per DB)     (funnel, tasks, habits…)
-```
+![Analytics pipeline — Notion's seven databases extract-loaded by el_notion.py into Snowflake RAW as VARIANT JSON, transformed by dbt into staging then marts, surfaced in an Evidence dashboard, all orchestrated daily by GitHub Actions](docs/data-architecture.svg)
 
 - **Extract-load** ([el_notion.py](el_notion.py)) snapshots all seven Notion databases into `RAW.NOTION_PAGES`, landing each page's properties as a Snowflake **VARIANT** — so the loader is schema-agnostic and all typing happens in dbt.
 - **Staging** parses the VARIANT into typed columns (one `stg_` model per database; a `strip_emoji` macro normalizes `🟢 Done` → `Done`).
 - **Marts** model the analytics: `fct_applications`, `fct_pipeline_events`, `fct_tasks`, `fct_habits`, and the headline **`mart_funnel`** — applications reaching each stage (from current status *and* full transition history) with stage-over-stage conversion.
 - **Tested + documented** — `unique` / `not_null` / `accepted_values` / `relationships` tests and column docs across staging and marts, run by `dbt build`.
 - **Orchestrated** by a scheduled [GitHub Action](.github/workflows/warehouse.yml): daily EL → `dbt build`, Snowflake creds in repo secrets.
+
+The dbt project's lineage — seven staging models off the raw VARIANT, fact tables, and the headline funnel mart (`unique` / `not_null` / `accepted_values` / `relationships` tests throughout):
+
+![dbt lineage graph — RAW.NOTION_PAGES feeding seven stg_ models, four of them feeding fct_ tables, with fct_applications and fct_pipeline_events feeding the headline mart_funnel](docs/dbt-lineage.svg)
 
 Auth is **key-pair** (MFA-safe and CI-friendly): generate an RSA key pair, register the public half on your user (`ALTER USER <you> SET RSA_PUBLIC_KEY='...'`), and point `SNOWFLAKE_PRIVATE_KEY_PATH` at the private key. Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
 
