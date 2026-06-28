@@ -6,7 +6,7 @@ Unit tests for the briefing formatters (pure — no I/O).
 """
 
 from datetime import date
-from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end, format_job_failure, format_habits_status
+from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end, format_job_failure, format_habits_status, format_today
 
 TODAY = date(2026, 6, 20)
 
@@ -147,6 +147,26 @@ def test_eod_journal_prompt():
     assert "Before bed" in out_open and "habits you did" in out_open
     out_done = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": False}])
     assert "Before bed" in out_done and "habits you did" not in out_done and "how today went" in out_done
+
+
+def test_today_top_actions():
+    tasks = [
+        {"name": "Low thing", "priority": "Low", "energy": "Low", "type": "Task", "due_date": None},
+        {"name": "Urgent report", "priority": "High", "energy": "High", "type": "Task", "due_date": "2026-06-20"},
+        {"name": "Medium task", "priority": "Medium", "energy": "Medium", "type": "Task", "due_date": None},
+        {"name": "Check in", "priority": "High", "energy": None, "type": "Project Check-in", "due_date": None},
+    ]
+    events = [{"summary": "Standup", "time_str": "3:00pm", "sort_key": "15:00", "all_day": False}]
+    out = format_today(tasks, events, TODAY)
+    assert "Right now" in out
+    assert out.index("Urgent report") < out.index("Medium task")   # priority order
+    assert "🔴" in out and "⚠️ due" in out
+    assert "Check in" not in out                                    # check-ins excluded
+    assert "Next: 3:00pm — Standup" in out
+
+
+def test_today_empty():
+    assert "you're clear" in format_today([], [], TODAY)
 
 
 def test_habits_status():

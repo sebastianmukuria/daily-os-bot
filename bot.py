@@ -421,6 +421,26 @@ async def handle_eod(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await eod_wrap(context)
 
 
+async def handle_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tight 'what should I do right now' view — no LLM call."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    import tools, briefings
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    try:
+        tasks = (await tools._get_tasks())["tasks"]
+        now = datetime.now(ZoneInfo("America/New_York"))
+        all_today = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
+        nowhm = now.strftime("%H:%M")
+        upcoming = [e for e in all_today if not e["all_day"] and e["sort_key"] >= nowhm]
+        await update.message.reply_text(
+            briefings.format_today(tasks, upcoming, now.date()), parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.exception("handle_today failed")
+        await update.message.reply_text(f"⚠️ Couldn't build your 'right now' view: {type(e).__name__}")
+
+
 async def handle_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Quick habit check — no LLM call."""
     if update.effective_chat.id != ALLOWED_CHAT_ID:
@@ -470,6 +490,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "/briefing — morning briefing on demand\n"
         "/midday — midday check\n"
         "/eod — end-of-day wrap\n"
+        "/today — your top 1-3 to do right now\n"
         "/habits — today's habit check-in\n"
         "/funnel — job-search funnel snapshot\n"
         "/pipeline — applications by status\n"
@@ -846,6 +867,7 @@ def main() -> None:
     app.add_handler(CommandHandler("briefing", handle_briefing))
     app.add_handler(CommandHandler("midday", handle_midday))
     app.add_handler(CommandHandler("eod", handle_eod))
+    app.add_handler(CommandHandler("today", handle_today))
     app.add_handler(CommandHandler("habits", handle_habits))
     app.add_handler(CommandHandler("funnel", handle_funnel))
     app.add_handler(CommandHandler("help", handle_help))

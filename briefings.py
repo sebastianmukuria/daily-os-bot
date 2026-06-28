@@ -291,3 +291,33 @@ def format_habits_status(habits: list) -> str:
         lines += [f"✅ {_esc(h['name'])}" + (f" (🔥 {h['streak']})" if h.get("streak") else "") for h in done]
     lines += ["", f"<i>{len(done)}/{len(habits)} active habits done today</i>"]
     return "\n".join(lines)
+
+
+def format_today(tasks: list, events: list, today) -> str:
+    """Tight 'what should I do right now' view — top 1-3 actions + next event.
+    `events` should be pre-filtered to upcoming (the caller knows the clock)."""
+    today_iso = today.isoformat()
+    rank_map = {"High": 0, "Medium": 1, "Low": 2}
+    work = [t for t in tasks if t.get("type") != "Project Check-in"]
+
+    def rank(t):
+        due = 0 if (t.get("due_date") and t["due_date"] <= today_iso) else 1
+        return (rank_map.get(t.get("priority"), 3), due, rank_map.get(t.get("energy"), 3))
+
+    top = sorted(work, key=rank)[:3]
+    lines = ["🎯 <b>Right now</b>", ""]
+    if not top:
+        lines.append("Nothing pressing — you're clear. 🎉")
+    for t in top:
+        tags = []
+        if t.get("priority") == "High":
+            tags.append("🔴")
+        if t.get("due_date") and t["due_date"] <= today_iso:
+            tags.append("⚠️ due")
+        suffix = f"  {' '.join(tags)}" if tags else ""
+        lines.append(f"• {_esc(t.get('name', ''))}{suffix}")
+    upcoming = [e for e in events if not e.get("all_day")]
+    if upcoming:
+        e = upcoming[0]
+        lines += ["", f"⏰ Next: {e.get('time_str', '')} — {_esc(e.get('summary', ''))}"]
+    return "\n".join(lines)
