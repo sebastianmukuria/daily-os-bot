@@ -12,6 +12,8 @@ on:
       - "pipeline_interviews.py"
       - "briefings.py"
       - "inbox_events.py"
+      - "aretry.py"
+      - "test_aretry.py"
       - "fixtures/**"
       - "test_classifier.py"
       - "test_pipeline_state.py"
@@ -46,3 +48,5 @@ jobs:
         run: python3 test_briefings.py
       - name: Inbox-event helper tests
         run: python3 test_inbox_events.py
+      - name: Retry helper tests
+        run: python3 test_aretry.py
