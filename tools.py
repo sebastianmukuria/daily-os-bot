@@ -3,6 +3,7 @@ import json
 import asyncio
 import logging
 import unicodedata
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -13,6 +14,7 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 from aretry import aretry
+from habits_logic import next_streak
 
 logger = logging.getLogger("daily_os_bot.tools")
 
@@ -89,15 +91,22 @@ def _load_google_creds() -> Credentials:
     )
 
 
+_token_lock = threading.Lock()
+
+
 def _google_creds_refreshed() -> Credentials:
-    creds = _load_google_creds()
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        # Persist the refreshed token to file only when running file-based (local).
-        if not os.environ.get("GOOGLE_TOKEN_JSON"):
-            with open(TOKEN_PATH, "w") as f:
-                f.write(creds.to_json())
-    return creds
+    # Calendar + Gmail run concurrently via asyncio.to_thread; serialize the refresh
+    # so two threads don't double-spend the (single-use) refresh token or interleave
+    # writes to token.json.
+    with _token_lock:
+        creds = _load_google_creds()
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            # Persist the refreshed token to file only when running file-based (local).
+            if not os.environ.get("GOOGLE_TOKEN_JSON"):
+                with open(TOKEN_PATH, "w") as f:
+                    f.write(creds.to_json())
+        return creds
 
 
 def _get_calendar_service():
@@ -197,7 +206,8 @@ def calendar_event_exists(title: str, date_iso: str) -> bool:
             calendarId="primary", timeMin=start.isoformat(), timeMax=end.isoformat(),
             singleEvents=True, maxResults=50,
         ).execute()
-    except Exception:
+    except Exception as e:
+        logger.warning("calendar_event_exists check failed: %s", e)
         return False
     t = _fold(title)
     for e in res.get("items", []):
@@ -950,9 +960,17 @@ async def _find_by_title(data_source_id: str, title_prop: str, query: str) -> li
     """Accent- and case-insensitive title search. Notion's `contains` is
     accent-sensitive (so 'resume' misses 'Résumé'), so we fetch and match in
     Python — preferring an exact folded-title match, else any folded substring."""
-    res = await notion.data_sources.query(data_source_id=data_source_id, page_size=100)
+    pages, cursor = [], None
+    while True:
+        kwargs = {"data_source_id": data_source_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        res = await aretry(lambda: notion.data_sources.query(**kwargs), label="find_by_title")
+        pages.extend(res.get("results", []))
+        if not res.get("has_more"):
+            break
+        cursor = res.get("next_cursor")
     q = _fold(query)
-    pages = res.get("results", [])
     exact = [p for p in pages if _fold(_title(p["properties"], title_prop)) == q]
     return exact or [p for p in pages if q in _fold(_title(p["properties"], title_prop))]
 
@@ -1171,10 +1189,14 @@ def _create_calendar_event(
     service = _get_calendar_service()
 
     if all_day:
+        # All-day events need an EXCLUSIVE end date; default to the day after start
+        # (Google rejects start == end with HTTP 400).
+        if not end_datetime:
+            end_datetime = (datetime.fromisoformat(start_datetime).date() + timedelta(days=1)).isoformat()
         body = {
             "summary": summary,
             "start": {"date": start_datetime},
-            "end": {"date": end_datetime or start_datetime},
+            "end": {"date": end_datetime},
         }
     else:
         if not end_datetime:
@@ -1536,8 +1558,7 @@ async def _log_habit(habit_name: str) -> dict:
     if last == today_s:
         return {"success": True, "habit": name, "already_done_today": True, "streak": streak}
 
-    yesterday_s = (today - timedelta(days=1)).isoformat()
-    new_streak = streak + 1 if last == yesterday_s else 1
+    new_streak = next_streak(_select(props, "Cadence"), last, today, streak)
     await notion.pages.update(
         page_id=page["id"],
         properties={

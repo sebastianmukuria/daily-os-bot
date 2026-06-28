@@ -14,6 +14,8 @@ on:
       - "inbox_events.py"
       - "aretry.py"
       - "test_aretry.py"
+      - "habits_logic.py"
+      - "test_habits_logic.py"
       - "fixtures/**"
       - "test_classifier.py"
       - "test_pipeline_state.py"
@@ -50,3 +52,5 @@ jobs:
         run: python3 test_inbox_events.py
       - name: Retry helper tests
         run: python3 test_aretry.py
+      - name: Habit streak logic tests
+        run: python3 test_habits_logic.py
