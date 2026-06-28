@@ -63,7 +63,8 @@ Fixing the high-confidence, contained ones; deferring behavior-changing ones.
   events. True nextPageToken pagination noted as a belt-and-suspenders follow-up.
 - [fixed] complete/update_task now refuse ambiguous matches and ask "which one?"
   (was: silently completed/edited whichever task Notion returned first).
-- [deferred] _find_applications uses case-sensitive Notion contains → misses casing.
+- [fixed] _find_applications matches company client-side (case/accent-insensitive)
+  and paginates — "rejected from goldman sachs" now finds "Goldman Sachs".
 - [deferred] interview_watch bulk clear() of dedup sets → rare duplicate reminders.
 
 ## Found but deferred (with reasons)

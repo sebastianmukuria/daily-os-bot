@@ -1639,11 +1639,21 @@ def _filter_by_role(pages: list, role: str = None) -> list:
 
 
 async def _find_applications(company: str, role: str = None) -> list:
-    res = await notion.data_sources.query(
-        data_source_id=JOB_PIPELINE_DS_ID,
-        filter={"property": "Company", "title": {"contains": company}},
-    )
-    return _filter_by_role(res.get("results", []), role)
+    # Notion's title `contains` is case- and accent-sensitive, so 'goldman sachs'
+    # would miss 'Goldman Sachs'. Match client-side (paginated) with _fold instead.
+    pages, cursor = [], None
+    while True:
+        kwargs = {"data_source_id": JOB_PIPELINE_DS_ID, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        res = await aretry(lambda: notion.data_sources.query(**kwargs), label="find_applications")
+        pages.extend(res.get("results", []))
+        if not res.get("has_more"):
+            break
+        cursor = res.get("next_cursor")
+    c = _fold(company)
+    matched = [p for p in pages if c in _fold(_title(p["properties"], "Company"))]
+    return _filter_by_role(matched, role)
 
 
 def _ambiguous_result(matches: list) -> dict:
