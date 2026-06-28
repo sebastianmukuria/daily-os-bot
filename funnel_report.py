@@ -23,7 +23,7 @@ def build_message(funnel, status, new_apps, moves) -> str:
     today = date.today()
     reached = [str(r) for _, r, _ in funnel]
     lines = [
-        f"📊 <b>Job Search Funnel</b> — week of {today:%b %-d}",
+        f"<b>Job Search Funnel</b> — week of {today:%b %-d}",
         "",
         "  →  ".join(reached) + "   <i>(Applied→Screen→Interview→Final→Offer)</i>",
         "",
@@ -53,7 +53,7 @@ def send_telegram(text: str) -> None:
 def build_caption(status, new_apps, moves, today) -> str:
     """Short caption to accompany the funnel chart (the chart shows the funnel)."""
     lines = [
-        f"📊 <b>Job Search Funnel</b> — week of {today:%b %-d}",
+        f"<b>Job Search Funnel</b> — week of {today:%b %-d}",
         "",
         f"This week: {new_apps} new application(s), {moves} status change(s)",
         "",

@@ -47,19 +47,19 @@ PIPELINE_STATUS_ORDER = {s: i for i, s in enumerate(
      "Ghosted", "Rejected", "Withdrawn"]
 )}
 
-# Real select option names in the Notion DBs (with emoji prefixes)
-ENERGY_MAP = {"High": "⚡ High", "Medium": "🔋 Medium", "Low": "🪫 Low"}
-PRIORITY_MAP = {"High": "🔴 High", "Medium": "🟠 Medium", "Low": "🟢 Low"}
+# Select option names in the Notion DBs (emoji-free; semantics carried by color).
+ENERGY_MAP = {"High": "High", "Medium": "Medium", "Low": "Low"}
+PRIORITY_MAP = {"High": "High", "Medium": "Medium", "Low": "Low"}
 STATUS_MAP = {
-    "Not Started": "🔴 Not Started",
-    "In Progress": "🟡 In Progress",
-    "Done": "🟢 Done",
-    "Blocked": "⚫ Blocked",
+    "Not Started": "Not Started",
+    "In Progress": "In Progress",
+    "Done": "Done",
+    "Blocked": "Blocked",
 }
 STATUS_NOT_STARTED = STATUS_MAP["Not Started"]
 STATUS_DONE = STATUS_MAP["Done"]
 PROJECT_STATUS_MAP = {
-    "Active": "🟢 Active", "Paused": "⏸️ Paused", "Done": "✅ Done", "Idea": "💡 Idea",
+    "Active": "Active", "Paused": "Paused", "Done": "Done", "Idea": "Idea",
 }
 
 ET = "America/New_York"
@@ -672,7 +672,7 @@ TOOLS = [
     {
         "name": "journal",
         "description": (
-            "Save a journal entry to Sebastian's Notion 📝 Journal. Use when he reflects "
+            "Save a journal entry to Sebastian's Notion Journal. Use when he reflects "
             "on his day — how it went, what he did, how he feels — especially in reply to "
             "the evening wrap. Pass his words as the entry (first person, lightly cleaned "
             "up; don't editorialize). Tags default to ['Daily']."
@@ -1593,7 +1593,7 @@ async def _add_habit(name: str, cadence: str = "Daily") -> dict:
 # --- Journal ---
 
 async def _add_journal_entry(entry: str, title: str = None, tags: list = None) -> dict:
-    """Append an entry to the Notion 📝 Journal DB (entry text lands as the page body)."""
+    """Append an entry to the Notion Journal DB (entry text lands as the page body)."""
     now = datetime.now(pytz.timezone(ET))
     if not title:
         title = now.strftime("%A, %B %-d")  # e.g. "Saturday, June 27"
@@ -1847,7 +1847,7 @@ def _date(props: dict, key: str) -> str | None:
 
 
 def _normalize_energy(value: str | None) -> str | None:
-    """Map '⚡ High' / '🔋 Medium' / '🪫 Low' back to plain High/Medium/Low."""
+    """Map an energy option name back to plain High/Medium/Low."""
     if not value:
         return None
     for plain in ("High", "Medium", "Low"):
@@ -1857,7 +1857,7 @@ def _normalize_energy(value: str | None) -> str | None:
 
 
 def _normalize_priority(value: str | None) -> str | None:
-    """Map '🔴 High' / '🟠 Medium' / '🟢 Low' back to plain High/Medium/Low."""
+    """Map a priority option name back to plain High/Medium/Low."""
     if not value:
         return None
     for plain in ("High", "Medium", "Low"):

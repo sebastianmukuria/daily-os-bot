@@ -58,7 +58,7 @@ def plan_email(email: dict, classification: dict, records: list) -> dict:
             "confidence": conf, "reason": f"no match for {event} event"}
 
 
-_EVENT_EMOJI = {"rejection": "❌", "interview_scheduled": "📅", "offer": "🎉", "screen_invite": "📞"}
+_ALERT_EVENTS = {"rejection", "interview_scheduled", "offer", "screen_invite"}
 _EVENT_STATUS = {
     "applied": "Applied", "screen_invite": "Recruiter Screen",
     "interview_scheduled": "Interviewing", "offer": "Offer", "rejection": "Rejected",
@@ -80,7 +80,7 @@ async def apply_plan(plan: dict, email: dict) -> dict:
             company=plan["company"], role=plan["role"], status="Applied",
             thread_id=email.get("thread_id"), confidence="Auto (unreviewed)",
         )
-        return {"alert": f"🆕 Logged application — {plan['company']}: {plan['role']} (auto)\n{link}",
+        return {"alert": f"Logged application — {plan['company']}: {plan['role']} (auto)\n{link}",
                 "confirm": None}
 
     if action == "update":
@@ -90,16 +90,15 @@ async def apply_plan(plan: dict, email: dict) -> dict:
             thread_id=email.get("thread_id"), existing_threads=rec.get("thread_ids", []),
             event=plan["event"], trigger=subject,
         )
-        if plan["event"] in _EVENT_EMOJI:
-            emoji = _EVENT_EMOJI[plan["event"]]
-            return {"alert": f"{emoji} {rec['company']} — {rec['role']}: now {plan['to_status']}\n{link}",
+        if plan["event"] in _ALERT_EVENTS:
+            return {"alert": f"{rec['company']} — {rec['role']}: now {plan['to_status']}\n{link}",
                     "confirm": None}
         return {"alert": None, "confirm": None}
 
     if action == "confirm":
         who = f"{plan.get('company', '?')} — {plan.get('role', '?')}".strip()
         return {"alert": None, "confirm": (
-            f"❓ Not sure about this job email:\n{subject}\n"
+            f"Not sure about this job email:\n{subject}\n"
             f"Looks like: {who} ({plan.get('event', '?')}, conf {plan.get('confidence')})\n"
             f"{plan['reason']}.\n{link}\n\n"
             "Reply to this message telling me what to do (e.g. 'log it as applied' "
@@ -134,7 +133,7 @@ async def build_daily_digest(ghosted_names: list) -> str:
     except Exception:
         interviews = []
 
-    lines = [f"📊 Job pipeline — {today}"]
+    lines = [f"Job pipeline — {today}"]
     if active:
         breakdown = ", ".join(f"{s} {by[s]}" for s in _ACTIVE if by.get(s))
         lines.append(f"Active: {len(active)}  ({breakdown})")
@@ -142,14 +141,14 @@ async def build_daily_digest(ghosted_names: list) -> str:
         lines.append("No active applications.")
 
     if interviews:
-        lines.append("\n📅 Interviews today:")
+        lines.append("\nInterviews today:")
         lines += [f"  • {e['summary']} ({e['start']})" for e in interviews]
     if overdue:
-        lines.append("\n⏰ Overdue follow-ups:")
+        lines.append("\nOverdue follow-ups:")
         lines += [f"  • {a['company']} — {a.get('next_action') or 'follow up'} (due {a['next_action_due']})"
                   for a in overdue]
     if ghosted_names:
-        lines.append("\n👻 Newly ghosted (21d quiet): " + ", ".join(ghosted_names))
+        lines.append("\nNewly ghosted (21d quiet): " + ", ".join(ghosted_names))
 
     return "\n".join(lines)
 

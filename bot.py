@@ -55,7 +55,8 @@ SYSTEM_PROMPT = """You are Sebastian's personal AI assistant, embedded in his Da
 
 Rules for how you respond:
 - Smallest-commit framing: say "open the draft" not "finish the essay", "send one text" not "resolve the conflict"
-- When listing tasks, order by Energy: High → Medium → Low. Flag stale tasks (not updated in 3+ days) with ⚠️
+- When listing tasks, order by Energy: High → Medium → Low. Flag stale tasks (not updated in 3+ days) clearly.
+- NEVER use emojis — not in task/idea/project/event titles, not in your replies, not in any Notion field. Plain text only, always.
 - Be concise — this is Telegram. Use bullet points, avoid walls of text.
 - Give 1-3 next actions max. Never overwhelm.
 - When someone says "add: X" parse it as a task creation. "done: X" = complete task. "idea: X" = add idea.
@@ -76,15 +77,15 @@ Due dates — don't silently leave a task undated when timing matters:
 - Only skip the date for clearly low-stakes someday tasks with no urgency ("read this article", "look into X", "buy milk") — leave those undated and don't nag.
 - Whenever you set a due date you inferred, say what you set ("due Thu") so he can correct it, and offer to time-block before it.
 
-Naming things — always polish the title and add an emoji:
-- Whenever you create a task, calendar event, idea, project, or reading-list item, never use Sebastian's raw phrasing verbatim. Rewrite it into a concise, title-cased label and ALWAYS include a relevant emoji (placed at the end).
-- Examples: "go to the gym at 8am" → "Gym Session 🏋️"; "call dentist about the crown" → "Dentist Call 🦷"; "write the q3 essay" → "Q3 Essay ✍️"; "buy groceries" → "Grocery Run 🛒"; "find a good book to read" → "Find a Book 📚".
+Naming things — polish the title, never use emojis:
+- Whenever you create a task, calendar event, idea, project, or reading-list item, never use Sebastian's raw phrasing verbatim. Rewrite it into a concise, clean, title-cased label — plain text, no emoji, no decoration.
+- Examples: "go to the gym at 8am" → "Gym Session"; "call dentist about the crown" → "Dentist Call"; "write the q3 essay" → "Q3 Essay"; "buy groceries" → "Grocery Run".
 - Keep the real meaning and any important specifics — just make it cleaner and shorter.
-- When one request creates BOTH a task and a calendar event, use the SAME polished title (with emoji) for both.
+- When one request creates BOTH a task and a calendar event, use the SAME polished title for both.
 
 Report outcomes honestly and specifically:
-- After using tools, tell Sebastian exactly what happened with EACH action — what worked and what didn't. Use ✓ for success and ✗ for failure.
-- If a tool returns an "error" field, that action FAILED. Say so plainly and include the actual reason (paraphrase the error briefly), e.g. "✗ Couldn't add to calendar — the Google token is invalid." Never call a failure "finicky", never gloss over it, and never imply something was saved when the tool returned an error.
+- After using tools, tell Sebastian exactly what happened with EACH action — what worked and what didn't. Mark each result clearly in plain words (no symbols or emojis).
+- If a tool returns an "error" field, that action FAILED. Say so plainly and include the actual reason (paraphrase the error briefly), e.g. "Couldn't add to calendar — the Google token is invalid." Never call a failure "finicky", never gloss over it, and never imply something was saved when the tool returned an error.
 - If part of a multi-step request succeeds and part fails, list each result separately so it's clear what still needs doing.
 
 You have access to:
@@ -346,10 +347,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.exception("handle_message failed")
         # Reset this chat's history so a corrupted state can't get stuck looping
         conversation_history[chat_id] = []
-        assistant_text = f"⚠️ Something broke: {type(e).__name__}. I reset our conversation — try again."
+        assistant_text = f"Something broke: {type(e).__name__}. I reset our conversation — try again."
 
     # Always reply with something, even if Claude returned no text after a tool call.
-    await send_reply(update, assistant_text or "✅ Done.")
+    await send_reply(update, assistant_text or "Done.")
 
 
 async def handle_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -438,7 +439,7 @@ async def handle_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
     except Exception as e:
         logger.exception("handle_today failed")
-        await update.message.reply_text(f"⚠️ Couldn't build your 'right now' view: {type(e).__name__}")
+        await update.message.reply_text(f"Couldn't build your 'right now' view: {type(e).__name__}")
 
 
 async def handle_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -452,7 +453,7 @@ async def handle_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(briefings.format_habits_status(habits), parse_mode="HTML")
     except Exception as e:
         logger.exception("handle_habits failed")
-        await update.message.reply_text(f"⚠️ Couldn't fetch habits: {type(e).__name__}")
+        await update.message.reply_text(f"Couldn't fetch habits: {type(e).__name__}")
 
 
 async def handle_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -471,7 +472,7 @@ async def handle_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
              "Rejected", "Withdrawn", "Ghosted"]
     total = len(apps)
     advanced = sum(counts.get(s, 0) for s in ("Recruiter Screen", "Interviewing", "Final Round", "Offer"))
-    lines = [f"📊 <b>Job Pipeline</b> — {total} applications", ""]
+    lines = [f"<b>Job Pipeline</b> — {total} applications", ""]
     lines += [f"• {s}: {counts[s]}" for s in order if counts.get(s)]
     lines += ["", f"Currently past screen: {advanced} · Offers: {counts.get('Offer', 0)}",
               "<i>Full conversion funnel lives in the Evidence dashboard.</i>"]
@@ -485,7 +486,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if update.effective_chat.id != ALLOWED_CHAT_ID:
         return
     await update.message.reply_text(
-        "🤖 Daily OS — here's what I can do.\n\n"
+        "Daily OS — here's what I can do.\n\n"
         "Commands:\n"
         "/briefing — morning briefing on demand\n"
         "/midday — midday check\n"
@@ -695,12 +696,11 @@ def _generate_dc_events(today) -> str:
         "traps, membership/club events, and kids' events. Do NOT fabricate — only "
         "include events you actually found.\n\n"
         "Output ONLY the final Telegram message (no preamble), as HTML using <b> for "
-        "names. Category emojis: 🎭 comedy/theatre · 🎵 music · 🥬 markets · 🎨 art · "
-        "🍺 food/drink · 🌿 outdoor · 🎪 festival. Avoid raw ampersands (write 'and'). "
+        "names. Do NOT use any emojis. Avoid raw ampersands (write 'and'). "
         "Format:\n\n"
-        "🗓 <b>DC This Week — [date range]</b>\n\n"
+        "<b>DC This Week — [date range]</b>\n\n"
         "Here's what's on — something for you and your girlfriend:\n\n"
-        "[emoji] <b>Event Name</b>\n[Date + time] · [Venue/Neighborhood]\n[one sentence]\n\n"
+        "<b>Event Name</b>\n[Date + time] · [Venue/Neighborhood]\n[one sentence]\n\n"
         "[...6-10 events...]\n\n"
         "<i>Reply to add any of these to your calendar.</i>\n\n"
         "If it's a quiet week, include fewer and say so."
@@ -788,7 +788,7 @@ async def inbox_calendar_sync(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.exception("inbox_calendar_sync: failed on %s", email.get("id"))
 
     if created:
-        text = "📧 <b>Inbox Sync</b>\n\nAdded to your calendar:\n" + "\n".join(created)
+        text = "<b>Inbox Sync</b>\n\nAdded to your calendar:\n" + "\n".join(created)
         await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
 
 
@@ -804,7 +804,7 @@ async def gmail_healthcheck(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(
             chat_id=ALLOWED_CHAT_ID,
             text=(
-                "⚠️ Gmail access is down — the job tracker can't read your inbox.\n"
+                "Gmail access is down — the job tracker can't read your inbox.\n"
                 f"({type(e).__name__})\n"
                 "Fix: re-run auth_google.py, then update GOOGLE_TOKEN_JSON on Railway."
             ),
@@ -842,7 +842,7 @@ async def interview_watch(context: ContextTypes.DEFAULT_TYPE) -> None:
             prep = f"~/Projects/Career/Applications/{company}/Prep/"
             await context.bot.send_message(
                 chat_id=ALLOWED_CHAT_ID,
-                text=f"⏰ Interview soon: {e['summary']} at {start.strftime('%-I:%M %p')}\nPrep: {prep}",
+                text=f"Interview soon: {e['summary']} at {start.strftime('%-I:%M %p')}\nPrep: {prep}",
             )
             try:  # best-effort link onto the pipeline record
                 await execute_tool("add_application_note",
@@ -854,7 +854,7 @@ async def interview_watch(context: ContextTypes.DEFAULT_TYPE) -> None:
             _interview_debriefed.add(eid)
             await context.bot.send_message(
                 chat_id=ALLOWED_CHAT_ID,
-                text=(f"📝 How did the {company} interview go? Reply with what they asked and "
+                text=(f"How did the {company} interview go? Reply with what they asked and "
                       "what felt weak — I'll save it to the pipeline."),
             )
 

@@ -22,7 +22,7 @@ def test_morning_order_sections_and_labels():
     out = format_morning(tasks, events, TODAY)
     assert "Morning Briefing" in out
     assert "[Blockworks] Standup" in out                      # work-calendar label
-    assert "High task ⚠️ due today" in out
+    assert "High task (due today)" in out
     assert "Project Check-ins" in out and "Check in on X" in out
     assert "Old task (5 days)" in out and "Stale" in out
     assert out.index("High Energy") < out.index("Medium Energy")  # energy order
@@ -42,7 +42,7 @@ def test_morning_caps_at_8():
 def test_midday_counts_and_due():
     open_tasks = [{"name": "A", "energy": "High", "due_date": "2026-06-20"}, {"name": "B", "energy": "Low", "due_date": None}]
     out = format_midday(open_tasks, 3, [], TODAY)
-    assert "3 ✅ done" in out and "2 remaining" in out and "⚠️ Due today: A" in out
+    assert "3 done" in out and "2 remaining" in out and "Due today: A" in out
 
 
 def test_midday_all_clear():
@@ -68,7 +68,7 @@ def test_morning_habits_and_stale_cap():
         {"name": "Vitamins", "due_today": False, "streak": 2, "done_today": True},
     ]
     out = format_morning(tasks, [], TODAY, habits)
-    assert "Habits due today" in out and "Gym" in out and "🔥 4" in out
+    assert "Habits due today" in out and "Gym" in out and "4-day streak" in out
     assert "Vitamins" not in out                 # not due today
     assert "+2 more stale" in out                # 7 stale, capped at 5
 
@@ -160,7 +160,7 @@ def test_today_top_actions():
     out = format_today(tasks, events, TODAY)
     assert "Right now" in out
     assert out.index("Urgent report") < out.index("Medium task")   # priority order
-    assert "🔴" in out and "⚠️ due" in out
+    assert "high priority" in out and "due today" in out
     assert "Check in" not in out                                    # check-ins excluded
     assert "Next: 3:00pm — Standup" in out
 
@@ -176,8 +176,8 @@ def test_habits_status():
         {"name": "Read", "due_today": True, "done_today": False, "streak": 0},
     ]
     out = format_habits_status(habits)
-    assert "Still to do today" in out and "Gym" in out and "🔥 3" in out
-    assert "Done today" in out and "Vitamins" in out and "🔥 5" in out
+    assert "Still to do today" in out and "Gym" in out and "3-day streak" in out
+    assert "Done today" in out and "Vitamins" in out and "5-day streak" in out
     assert "1/3 active habits done today" in out
 
 
@@ -187,7 +187,7 @@ def test_habits_status_empty():
 
 def test_eod_open_habits_show_streak():
     out = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": True, "streak": 7}])
-    assert "Meditate (🔥 7)" in out
+    assert "Meditate (7-day streak)" in out
 
 
 def test_job_failure_alert():
