@@ -12,6 +12,8 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
+from aretry import aretry
+
 logger = logging.getLogger("daily_os_bot.tools")
 
 # Full set granted at auth time. Gmail uses 'modify' (read messages + apply the
@@ -902,7 +904,7 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     if conditions:
         params["filter"] = {"and": conditions} if len(conditions) > 1 else conditions[0]
 
-    result = await notion.data_sources.query(**params)
+    result = await aretry(lambda: notion.data_sources.query(**params), label="get_tasks")
 
     energy_order = {"High": 0, "Medium": 1, "Low": 2}
     today = datetime.now(pytz.timezone(ET)).date()
@@ -1481,9 +1483,12 @@ async def _find_habit(name: str) -> dict | None:
 
 
 async def _get_habits() -> dict:
-    res = await notion.data_sources.query(
-        data_source_id=HABITS_DS_ID,
-        filter={"property": "Active", "checkbox": {"equals": True}},
+    res = await aretry(
+        lambda: notion.data_sources.query(
+            data_source_id=HABITS_DS_ID,
+            filter={"property": "Active", "checkbox": {"equals": True}},
+        ),
+        label="get_habits",
     )
     today_d = datetime.now(pytz.timezone(ET)).date()
     today = today_d.isoformat()
