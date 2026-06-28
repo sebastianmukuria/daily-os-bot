@@ -8,6 +8,10 @@ locally (notion_client/pytest unavailable here); additive/reversible Notion ops.
 ## Changelog
 - **Reliability/foundation:** `aretry.py` — pure async retry-with-backoff helper
   (+ `test_aretry.py`, 4 tests). Will wrap flaky Notion/Telegram/Google calls.
+- **Reliability: no more silent briefing failures.** `briefings.format_job_failure`
+  (+ test) + `bot._alert`; the 6 user-facing scheduled jobs (morning/midday/evening,
+  week-ahead/in-review, pipeline digest) now Telegram-alert on exception instead of
+  only logging. Background/high-frequency jobs left on silent-log to avoid spam.
 
 ## Found but deferred (with reasons)
 - _(to fill as I go)_

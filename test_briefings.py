@@ -6,7 +6,7 @@ Unit tests for the briefing formatters (pure — no I/O).
 """
 
 from datetime import date
-from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end
+from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end, format_job_failure
 
 TODAY = date(2026, 6, 20)
 
@@ -147,6 +147,12 @@ def test_eod_journal_prompt():
     assert "Before bed" in out_open and "habits you did" in out_open
     out_done = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": False}])
     assert "Before bed" in out_done and "habits you did" not in out_done and "how today went" in out_done
+
+
+def test_job_failure_alert():
+    out = format_job_failure("Morning briefing", "TimeoutError: read timed out")
+    assert "Morning briefing didn't send" in out
+    assert "TimeoutError" in out and "data is safe" in out
 
 
 def _run():

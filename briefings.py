@@ -262,3 +262,12 @@ def format_week_end(done: list, pipeline_events: list, next_cal: dict, overdue: 
 
     lines += ["", "<i>Have a good weekend.</i>"]
     return "\n".join(lines)
+
+
+def format_job_failure(label: str, err: str) -> str:
+    """Short alert when a scheduled job fails, so failures aren't silent."""
+    return (
+        f"⚠️ <b>{_esc(label)} didn't send</b>\n"
+        f"{_esc(err)}\n"
+        f"<i>Your data is safe — this was a fetch/send hiccup. I'll retry next cycle.</i>"
+    )
