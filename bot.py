@@ -731,10 +731,11 @@ async def dc_events_scout(context: ContextTypes.DEFAULT_TYPE) -> None:
         text = await asyncio.to_thread(_generate_dc_events, now.date())
         if not text:
             return
-        try:
-            await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
-        except BadRequest:
-            await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text)  # HTML fallback
+        for chunk in _chunk(text):
+            try:
+                await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=chunk, parse_mode="HTML")
+            except BadRequest:
+                await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=chunk)  # HTML fallback
     except Exception:
         logger.exception("dc_events_scout failed")
 
