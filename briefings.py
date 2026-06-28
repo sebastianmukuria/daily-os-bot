@@ -149,7 +149,10 @@ def format_eod(done_today: list, rolling: list, tomorrow_events: list, today: da
     missed_habits = [h for h in (habits or []) if h.get("due_today")]
     if missed_habits:
         lines += ["", "💪 <b>Habits still open</b>"]
-        lines += [f"• {_esc(h['name'])}" for h in missed_habits]
+        lines += [
+            f"• {_esc(h['name'])}" + (f" (🔥 {h['streak']})" if h.get("streak") else "")
+            for h in missed_habits
+        ]
 
     lines += ["", "📅 <b>Tomorrow's calendar</b>"]
     lines += [_fmt_event(e) for e in tomorrow_events] if tomorrow_events else ["Nothing scheduled yet."]
@@ -271,3 +274,20 @@ def format_job_failure(label: str, err: str) -> str:
         f"{_esc(err)}\n"
         f"<i>Your data is safe — this was a fetch/send hiccup. I'll retry next cycle.</i>"
     )
+
+
+def format_habits_status(habits: list) -> str:
+    """Quick habit check for the /habits command."""
+    if not habits:
+        return "🔁 <b>Habits</b>\n\nNo active habits yet. Say “track X daily” to add one."
+    due_open = [h for h in habits if h.get("due_today")]
+    done = [h for h in habits if h.get("done_today")]
+    lines = ["🔁 <b>Habits</b>"]
+    if due_open:
+        lines += ["", "<b>Still to do today</b>"]
+        lines += [f"⬜ {_esc(h['name'])}" + (f" (🔥 {h['streak']})" if h.get("streak") else "") for h in due_open]
+    if done:
+        lines += ["", "<b>Done today</b>"]
+        lines += [f"✅ {_esc(h['name'])}" + (f" (🔥 {h['streak']})" if h.get("streak") else "") for h in done]
+    lines += ["", f"<i>{len(done)}/{len(habits)} active habits done today</i>"]
+    return "\n".join(lines)

@@ -421,6 +421,20 @@ async def handle_eod(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await eod_wrap(context)
 
 
+async def handle_habits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Quick habit check — no LLM call."""
+    if update.effective_chat.id != ALLOWED_CHAT_ID:
+        return
+    import tools, briefings
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    try:
+        habits = (await tools._get_habits())["habits"]
+        await update.message.reply_text(briefings.format_habits_status(habits), parse_mode="HTML")
+    except Exception as e:
+        logger.exception("handle_habits failed")
+        await update.message.reply_text(f"⚠️ Couldn't fetch habits: {type(e).__name__}")
+
+
 async def handle_funnel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Live job-search funnel snapshot (current status), straight from Notion."""
     if update.effective_chat.id != ALLOWED_CHAT_ID:
@@ -456,6 +470,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "/briefing — morning briefing on demand\n"
         "/midday — midday check\n"
         "/eod — end-of-day wrap\n"
+        "/habits — today's habit check-in\n"
         "/funnel — job-search funnel snapshot\n"
         "/pipeline — applications by status\n"
         "/clear — reset our conversation\n"
@@ -831,6 +846,7 @@ def main() -> None:
     app.add_handler(CommandHandler("briefing", handle_briefing))
     app.add_handler(CommandHandler("midday", handle_midday))
     app.add_handler(CommandHandler("eod", handle_eod))
+    app.add_handler(CommandHandler("habits", handle_habits))
     app.add_handler(CommandHandler("funnel", handle_funnel))
     app.add_handler(CommandHandler("help", handle_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

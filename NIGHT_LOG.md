@@ -13,6 +13,9 @@ locally (notion_client/pytest unavailable here); additive/reversible Notion ops.
   week-ahead/in-review, pipeline digest) now Telegram-alert on exception instead of
   only logging. Background/high-frequency jobs left on silent-log to avoid spam.
 
+- **Usefulness:** `/habits` quick-status command (no LLM) + `format_habits_status`
+  (tested); the 9pm wrap now shows 🔥 streaks on still-open habits for momentum.
+
 ## Found but deferred (with reasons)
 - _(to fill as I go)_
 

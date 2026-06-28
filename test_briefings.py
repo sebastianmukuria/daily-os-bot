@@ -6,7 +6,7 @@ Unit tests for the briefing formatters (pure — no I/O).
 """
 
 from datetime import date
-from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end, format_job_failure
+from briefings import format_morning, format_midday, format_eod, format_week_start, format_week_end, format_job_failure, format_habits_status
 
 TODAY = date(2026, 6, 20)
 
@@ -147,6 +147,27 @@ def test_eod_journal_prompt():
     assert "Before bed" in out_open and "habits you did" in out_open
     out_done = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": False}])
     assert "Before bed" in out_done and "habits you did" not in out_done and "how today went" in out_done
+
+
+def test_habits_status():
+    habits = [
+        {"name": "Gym", "due_today": True, "done_today": False, "streak": 3},
+        {"name": "Vitamins", "due_today": False, "done_today": True, "streak": 5},
+        {"name": "Read", "due_today": True, "done_today": False, "streak": 0},
+    ]
+    out = format_habits_status(habits)
+    assert "Still to do today" in out and "Gym" in out and "🔥 3" in out
+    assert "Done today" in out and "Vitamins" in out and "🔥 5" in out
+    assert "1/3 active habits done today" in out
+
+
+def test_habits_status_empty():
+    assert "No active habits" in format_habits_status([])
+
+
+def test_eod_open_habits_show_streak():
+    out = format_eod([], [], [], TODAY, [{"name": "Meditate", "due_today": True, "streak": 7}])
+    assert "Meditate (🔥 7)" in out
 
 
 def test_job_failure_alert():
