@@ -5,6 +5,30 @@ breaking the live bot. Flow: branch → PR (CI) → batched merges to main (depl
 Constraints: token-frugal; new logic in dependency-free modules so it's testable
 locally (notion_client/pytest unavailable here); additive/reversible Notion ops.
 
+## ☀️ Morning summary
+9 commits across 6 deploys to `main` (Railway auto-deploys; worker builds green
+through batch 5, batch 6 building). All of this is live.
+
+**Reliability** — `aretry` retry/backoff on the reads behind every briefing; the 6
+user-facing jobs now Telegram-alert you on failure instead of going silent; long
+briefings chunk (were dropped >4096 chars); Google token refresh serialized (was a
+corruption race); pipeline dedup; calendar page size 250 (was dropping events on
+busy days).
+
+**Correctness** — cadence-aware habit streaks (Weekly/MWF/Weekdays no longer reset
+to 1); all-day events fixed (were 400-ing); find-task paginates (>100 tasks);
+ambiguous task names now ask "which one?" instead of editing the wrong task.
+
+**Usefulness** — `/today` (top 1-3 right now) and `/habits` (quick check); 🔥 streaks
+in the 9pm wrap; Journal DB now flows to the warehouse for future analytics.
+
+**Tests** — 34 pure unit tests (briefings 22, habits_logic 8, aretry 4), all green
+and wired into CI; tools.py/bot.py verified via ast + a successful Railway boot.
+
+**Bug audit** — a 3-agent scan found 13 issues; fixed all 6 high + 5/6 medium.
+
+(Details below; open questions under "For Sebastian to review/decide".)
+
 ## Changelog
 - **Reliability/foundation:** `aretry.py` — pure async retry-with-backoff helper
   (+ `test_aretry.py`, 4 tests). Will wrap flaky Notion/Telegram/Google calls.
