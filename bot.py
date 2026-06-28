@@ -555,6 +555,13 @@ async def pipeline_daily(context: ContextTypes.DEFAULT_TYPE) -> None:
         await _alert(context, "Job pipeline digest", e)
 
 
+async def _send_html(context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    """Send HTML to the user, chunked under Telegram's 4096-char limit so a long
+    briefing is never dropped as 'message too long'."""
+    for chunk in _chunk(text):
+        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=chunk, parse_mode="HTML")
+
+
 async def _alert(context: ContextTypes.DEFAULT_TYPE, label: str, exc: Exception) -> None:
     """Best-effort failure alert so a broken scheduled job isn't silent."""
     import briefings
@@ -583,7 +590,7 @@ async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
         habits = (await tools._get_habits())["habits"]
         today = datetime.now(ZoneInfo("America/New_York")).date()
         text = briefings.format_morning(tasks, events, today, habits)
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        await _send_html(context, text)
     except Exception as e:
         logger.exception("morning_briefing failed")
         await _alert(context, "Morning briefing", e)
@@ -600,7 +607,7 @@ async def midday_check(context: ContextTypes.DEFAULT_TYPE) -> None:
         nowhm = now.strftime("%H:%M")
         afternoon = [e for e in all_today if not e["all_day"] and e["sort_key"] >= nowhm]
         text = briefings.format_midday(tasks, done_count, afternoon, now.date())
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        await _send_html(context, text)
     except Exception as e:
         logger.exception("midday_check failed")
         await _alert(context, "Midday check", e)
@@ -616,7 +623,7 @@ async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
         habits = (await tools._get_habits())["habits"]
         today = datetime.now(ZoneInfo("America/New_York")).date()
         text = briefings.format_eod(done, rolling, tomorrow, today, habits)
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        await _send_html(context, text)
     except Exception as e:
         logger.exception("eod_wrap failed")
         await _alert(context, "Evening wrap", e)
@@ -640,7 +647,7 @@ async def week_start_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
         checkins = [p for p in projects if p.get("next_check_in") and ws <= p["next_check_in"] <= we]
         label = f"{(now.date() + timedelta(days=1)):%b %-d} – {(now.date() + timedelta(days=7)):%b %-d}"
         text = briefings.format_week_start(cal, due_tasks, job_actions, checkins, label)
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        await _send_html(context, text)
     except Exception as e:
         logger.exception("week_start_roundup failed")
         await _alert(context, "Week-ahead roundup", e)
@@ -666,7 +673,7 @@ async def week_end_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
         upcoming = [a for a in apps if a.get("next_action_due") and ns <= a["next_action_due"] <= ne]
         label = f"{(now.date() - timedelta(days=4)):%b %-d} – {now.date():%b %-d}"
         text = briefings.format_week_end(done, events, next_cal, overdue, stale_count, upcoming, label)
-        await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text, parse_mode="HTML")
+        await _send_html(context, text)
     except Exception as e:
         logger.exception("week_end_roundup failed")
         await _alert(context, "Week-in-review", e)
