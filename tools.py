@@ -1038,9 +1038,13 @@ async def _find_task(task_name: str) -> dict | None:
 
 
 async def _complete_task(task_name: str) -> dict:
-    page = await _find_task(task_name)
-    if not page:
+    matches = await _find_by_title(TASKS_DS_ID, "Task", task_name)
+    if not matches:
         return {"success": False, "error": f"No task found matching '{task_name}'"}
+    if len(matches) > 1:
+        names = [_title(m["properties"], "Task") for m in matches[:5]]
+        return {"success": False, "error": f"Multiple tasks match '{task_name}': {names}. Which one?"}
+    page = matches[0]
 
     found_name = _title(page["properties"], "Task")
     await notion.pages.update(
@@ -1060,9 +1064,13 @@ async def _update_task(
     priority: str = None,
 ) -> dict:
     """Edit an existing task — only the fields provided are changed."""
-    page = await _find_task(task_name)
-    if not page:
+    matches = await _find_by_title(TASKS_DS_ID, "Task", task_name)
+    if not matches:
         return {"success": False, "error": f"No task found matching '{task_name}'"}
+    if len(matches) > 1:
+        names = [_title(m["properties"], "Task") for m in matches[:5]]
+        return {"success": False, "error": f"Multiple tasks match '{task_name}': {names}. Which one?"}
+    page = matches[0]
 
     old_name = _title(page["properties"], "Task")
     properties: dict = {}

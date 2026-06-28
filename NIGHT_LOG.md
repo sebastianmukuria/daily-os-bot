@@ -37,7 +37,8 @@ Fixing the high-confidence, contained ones; deferring behavior-changing ones.
   if the Telegram send fails.
 - [fixed] Calendar page size raised to 250 (was 20–100) → busy days no longer drop
   events. True nextPageToken pagination noted as a belt-and-suspenders follow-up.
-- [deferred] _find_by_title picks matches[0] on ambiguous partial → wrong task.
+- [fixed] complete/update_task now refuse ambiguous matches and ask "which one?"
+  (was: silently completed/edited whichever task Notion returned first).
 - [deferred] _find_applications uses case-sensitive Notion contains → misses casing.
 - [deferred] interview_watch bulk clear() of dedup sets → rare duplicate reminders.
 
