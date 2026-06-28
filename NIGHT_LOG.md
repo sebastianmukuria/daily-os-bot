@@ -48,6 +48,20 @@ and wired into CI; tools.py/bot.py verified via ast + a successful Railway boot.
   `_find_by_title` paginates (finds tasks past #100); `calendar_event_exists` logs
   instead of silently permitting duplicate events.
 
+## De-emojify + Notion polish (2026-06-28, by request)
+- **Code (deployed):** system prompt now forbids emojis everywhere (was "always add an
+  emoji"); briefings, /today, /habits, pipeline alerts + digest, inbox sync, interview
+  reminders, funnel report, and the DC-events prompt are all plain text; option-name
+  constants are emoji-free (identity maps).
+- **Notion data (values preserved):** de-emojified all 8 DB titles; renamed + recolored
+  the select options in Tasks (Status/Energy/Priority) and Projects (Status) to a clean
+  palette — all 49 task values + 8 project statuses repointed from a backup, intact;
+  de-emojified 53 page titles; removed emoji page icons.
+- **Home page** retitled "Daily OS" (icon removed) and rewritten: clean personalized
+  copy, correct 9pm cadence, a "Workspace" section over the databases.
+- Notion's API can't recolor an existing select option, so recolor = recreate options
+  (clean, no leftover emoji options) + repoint every page from a per-page value backup.
+
 ## Bug hunt (3 Sonnet scanners) — 13 findings (6 high / 6 med / 1 low)
 Fixing the high-confidence, contained ones; deferring behavior-changing ones.
 - [fixed] Briefings sent without chunking → >4096 chars throws, now masked as a
