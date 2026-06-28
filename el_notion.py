@@ -32,6 +32,7 @@ SOURCES = {
     "ideas": "b70516f3-6782-4256-837e-85bb5ce11b62",
     "reading": "29aba34c-4a58-4096-8c7f-f649976e7639",
     "habits": "818e9cd3-48a1-413e-9d38-aa74c6b4e480",
+    "journal": "4a46d7bc-583c-4b04-9a60-346a5ab06c3f",
     "job_pipeline": "551e0098-cf2f-41eb-8dff-437501636fbe",
     "pipeline_events": "bf426aeb-7a4c-45d5-83ac-7155e28cca79",
 }
