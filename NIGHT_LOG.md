@@ -33,8 +33,10 @@ Fixing the high-confidence, contained ones; deferring behavior-changing ones.
 - [fixed] Google token refresh race (concurrent cal+gmail) can corrupt token.json.
 - [fixed] _find_by_title only reads first 100 pages → can't find task #101+ (DB has 49).
 - [fixed] calendar_event_exists swallows API errors silently → duplicate events.
-- [deferred] pipeline_poll applies Gmail label after send → dup record if send fails.
-- [deferred] Calendar fetches cap at 20–100 w/o pagination → busy days drop events.
+- [fixed] pipeline_poll now labels the email BEFORE notifying → no duplicate record
+  if the Telegram send fails.
+- [fixed] Calendar page size raised to 250 (was 20–100) → busy days no longer drop
+  events. True nextPageToken pagination noted as a belt-and-suspenders follow-up.
 - [deferred] _find_by_title picks matches[0] on ambiguous partial → wrong task.
 - [deferred] _find_applications uses case-sensitive Notion contains → misses casing.
 - [deferred] interview_watch bulk clear() of dedup sets → rare duplicate reminders.

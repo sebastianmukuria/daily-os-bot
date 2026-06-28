@@ -534,10 +534,12 @@ async def pipeline_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
             classification = await asyncio.to_thread(classify_email, email)
             plan = plan_email(email, classification, records)
             out = await apply_plan(plan, email)
+            # Mark processed BEFORE notifying: a Telegram failure must not cause the
+            # same email to be re-ingested next poll (which would duplicate the record).
+            await asyncio.to_thread(tools.gmail_apply_processed_label, email["id"])
             for text in (out.get("alert"), out.get("confirm")):
                 if text:
                     await context.bot.send_message(chat_id=ALLOWED_CHAT_ID, text=text)
-            await asyncio.to_thread(tools.gmail_apply_processed_label, email["id"])
         except Exception:
             logger.exception("pipeline_poll: failed on message %s", email.get("id"))
 

@@ -1299,7 +1299,7 @@ def get_calendar_events_window(hours_back: int = 0, days_ahead: int = 2) -> list
         try:
             result = service.events().list(
                 calendarId=cid, timeMin=time_min, timeMax=time_max,
-                singleEvents=True, orderBy="startTime", maxResults=50,
+                singleEvents=True, orderBy="startTime", maxResults=250,
             ).execute()
         except Exception:
             logger.warning("calendar fetch failed for %s", cid)
@@ -1332,7 +1332,7 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
         try:
             res = service.events().list(
                 calendarId=cid, timeMin=time_min, timeMax=time_max,
-                singleEvents=True, orderBy="startTime", maxResults=20,
+                singleEvents=True, orderBy="startTime", maxResults=250,
             ).execute()
         except Exception:
             logger.warning("calendar fetch failed for %s", cid)
@@ -1390,7 +1390,7 @@ def get_events_for_day(offset_days: int = 0) -> dict:
         try:
             res = service.events().list(
                 calendarId=cid, timeMin=start.isoformat(), timeMax=end.isoformat(),
-                singleEvents=True, orderBy="startTime", maxResults=25,
+                singleEvents=True, orderBy="startTime", maxResults=250,
             ).execute()
         except Exception:
             logger.warning("calendar fetch failed for %s", cid)
@@ -1431,7 +1431,7 @@ def get_events_for_range(start_offset_days: int = 0, num_days: int = 7) -> dict:
         try:
             res = service.events().list(
                 calendarId=cid, timeMin=start.isoformat(), timeMax=end.isoformat(),
-                singleEvents=True, orderBy="startTime", maxResults=100,
+                singleEvents=True, orderBy="startTime", maxResults=250,
             ).execute()
         except Exception:
             logger.warning("calendar fetch failed for %s", cid)
