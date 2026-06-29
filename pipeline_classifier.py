@@ -98,6 +98,7 @@ CLASSIFY_TOOL = {
             "role": {"type": "string", "description": "Role title, or empty if unclear"},
             "event_type": {"type": "string", "enum": EVENT_TYPES},
             "confidence": {"type": "number", "description": "0.0 to 1.0"},
+            "interview_datetime": {"type": "string", "description": "If (and only if) the email schedules an interview or call at a SPECIFIC date AND time, that moment as US-Eastern ISO 8601 (e.g. 2026-07-02T14:30:00). Empty string if no specific time is given."},
         },
         "required": ["company", "role", "event_type", "confidence"],
     },
@@ -108,7 +109,10 @@ _SYSTEM = (
     "company, the role title, the event type, and your confidence (0-1). Only genuine job "
     "applications count: apartment-rental 'applications' and software OAuth 'applications' "
     "are NOT job-related — classify those as event_type 'other' with low confidence. "
-    "Be precise; leave a field empty rather than guessing."
+    "Be precise; leave a field empty rather than guessing. "
+    "If the email schedules an interview or call at a specific date and time, set "
+    "interview_datetime to that moment in US-Eastern ISO 8601 (date and time together); "
+    "if only a date with no time, or no time at all, leave interview_datetime empty."
 )
 
 

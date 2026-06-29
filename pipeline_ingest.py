@@ -40,6 +40,7 @@ def plan_email(email: dict, classification: dict, records: list) -> dict:
             "action": _DECISION_TO_ACTION[d["action"]],
             "record": rec, "to_status": d.get("to_status"),
             "event": event, "confidence": conf, "reason": d["reason"],
+            "event_datetime": classification.get("interview_datetime") or "",
         }
 
     if m.get("by") == "ambiguous":
@@ -63,6 +64,21 @@ _EVENT_STATUS = {
     "applied": "Applied", "screen_invite": "Recruiter Screen",
     "interview_scheduled": "Interviewing", "offer": "Offer", "rejection": "Rejected",
 }
+
+
+_INTERVIEW_EVENTS = {"interview_scheduled", "screen_invite"}
+
+
+def _add_interview_to_calendar(rec: dict, when_iso: str) -> bool:
+    """Create a Google Calendar event for a scheduled interview/call, deduped by
+    title+date. Sync — run via asyncio.to_thread. Returns True if created."""
+    import tools
+    role = rec.get("role")
+    title = f"Interview — {rec.get('company', '')}" + (f" ({role})" if role else "")
+    if tools.calendar_event_exists(title, when_iso[:10]):
+        return False
+    tools._create_calendar_event(summary=title, start_datetime=when_iso)
+    return True
 
 
 async def apply_plan(plan: dict, email: dict) -> dict:
@@ -90,8 +106,16 @@ async def apply_plan(plan: dict, email: dict) -> dict:
             thread_id=email.get("thread_id"), existing_threads=rec.get("thread_ids", []),
             event=plan["event"], trigger=subject,
         )
+        cal_note = ""
+        when = plan.get("event_datetime")
+        if plan["event"] in _INTERVIEW_EVENTS and when:
+            try:
+                if await asyncio.to_thread(_add_interview_to_calendar, rec, when):
+                    cal_note = "\nAdded to your calendar."
+            except Exception:
+                cal_note = ""
         if plan["event"] in _ALERT_EVENTS:
-            return {"alert": f"{rec['company']} — {rec['role']}: now {plan['to_status']}\n{link}",
+            return {"alert": f"{rec['company']} — {rec['role']}: now {plan['to_status']}{cal_note}\n{link}",
                     "confirm": None}
         return {"alert": None, "confirm": None}
 

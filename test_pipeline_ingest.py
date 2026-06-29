@@ -65,6 +65,17 @@ def test_ambiguous_confirms():
     assert p["action"] == "confirm" and len(p["candidates"]) == 2, p
 
 
+def test_update_carries_interview_datetime():
+    records = [{"id": "1", "company": "LA28", "role": "Analyst",
+                "status": "Applied", "thread_ids": ["t1"]}]
+    p = plan_email({"thread_id": "t1"},
+                   {"company": "LA28", "role": "Analyst", "event_type": "interview_scheduled",
+                    "confidence": 0.95, "interview_datetime": "2026-07-02T14:30:00"},
+                   records)
+    assert p["action"] == "update" and p["to_status"] == "Interviewing", p
+    assert p["event_datetime"] == "2026-07-02T14:30:00", p
+
+
 def _run():
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:
