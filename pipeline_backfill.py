@@ -38,7 +38,7 @@ from pipeline_state import (
     STAGE_RANK, CONFIDENCE_THRESHOLD,
 )
 
-_ET = pytz.timezone("America/New_York")
+_ET = pytz.timezone("America/Los_Angeles")
 CACHE_PATH = os.path.join(os.path.dirname(__file__), "backfill_cache.json")
 # Pace classification under entry-tier rate limits (lower the pause on a higher tier).
 BACKFILL_PACE_SEC = float(os.environ.get("BACKFILL_PACE_SEC", "1.4"))

@@ -119,7 +119,7 @@ Web search:
 - If he later says to add something to his calendar, use the details you found (date, time, venue as the location) to create the event — ask only for anything genuinely missing.
 
 When creating calendar events, infer the date/time from context and the current date provided.
-Times are Eastern. If no end time is given, a 1-hour default is fine.
+Times are Pacific. If no end time is given, a 1-hour default is fine.
 
 Editing vs. creating — don't make duplicates:
 - If Sebastian asks to change or add a detail to an event that already exists (add a location, move the time, rename it), UPDATE that event with update_calendar_event. Never create a second event for the same thing.
@@ -270,8 +270,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     base_history = conversation_history.get(chat_id, [])
 
-    et = pytz.timezone("America/New_York")
-    now_str = datetime.now(et).strftime("%A, %B %d, %Y %I:%M %p ET")
+    et = pytz.timezone("America/Los_Angeles")
+    now_str = datetime.now(et).strftime("%A, %B %d, %Y %I:%M %p PT")
     project_names = await _active_project_names()
     projects_line = (
         "Sebastian's active projects (use these names to link tasks): "
@@ -427,7 +427,7 @@ async def handle_today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
         tasks = (await tools._get_tasks())["tasks"]
-        now = datetime.now(ZoneInfo("America/New_York"))
+        now = datetime.now(ZoneInfo("America/Los_Angeles"))
         all_today = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
         nowhm = now.strftime("%H:%M")
         upcoming = [e for e in all_today if not e["all_day"] and e["sort_key"] >= nowhm]
@@ -575,7 +575,7 @@ async def _alert(context: ContextTypes.DEFAULT_TYPE, label: str, exc: Exception)
 
 
 async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """7:30am ET — calendar + energy-sorted tasks + project check-ins + stale flags."""
+    """7:30am PT —calendar + energy-sorted tasks + project check-ins + stale flags."""
     import tools, briefings
     try:
         tasks = (await tools._get_tasks())["tasks"]
@@ -587,7 +587,7 @@ async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
                     pass
         events = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
         habits = (await tools._get_habits())["habits"]
-        today = datetime.now(ZoneInfo("America/New_York")).date()
+        today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
         text = briefings.format_morning(tasks, events, today, habits)
         await _send_html(context, text)
     except Exception as e:
@@ -596,12 +596,12 @@ async def morning_briefing(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def midday_check(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """12:30pm ET — progress (done vs open), afternoon events, top remaining tasks."""
+    """12:30pm PT —progress (done vs open), afternoon events, top remaining tasks."""
     import tools, briefings
     try:
         tasks = (await tools._get_tasks())["tasks"]
         done_count = len(await tools.get_tasks_done_today())
-        now = datetime.now(ZoneInfo("America/New_York"))
+        now = datetime.now(ZoneInfo("America/Los_Angeles"))
         all_today = (await asyncio.to_thread(tools.get_events_for_day, 0))["events"]
         nowhm = now.strftime("%H:%M")
         afternoon = [e for e in all_today if not e["all_day"] and e["sort_key"] >= nowhm]
@@ -613,14 +613,14 @@ async def midday_check(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """9pm ET — what got done, what's rolling, tomorrow's calendar, habit check-in + journal prompt."""
+    """9pm PT —what got done, what's rolling, tomorrow's calendar, habit check-in + journal prompt."""
     import tools, briefings
     try:
         done = await tools.get_tasks_done_today()
         rolling = (await tools._get_tasks())["tasks"]
         tomorrow = (await asyncio.to_thread(tools.get_events_for_day, 1))["events"]
         habits = (await tools._get_habits())["habits"]
-        today = datetime.now(ZoneInfo("America/New_York")).date()
+        today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
         text = briefings.format_eod(done, rolling, tomorrow, today, habits)
         await _send_html(context, text)
     except Exception as e:
@@ -629,8 +629,8 @@ async def eod_wrap(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def week_start_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sunday 5pm ET — the week ahead: calendar, interviews/job actions, deadlines, check-ins."""
-    now = datetime.now(ZoneInfo("America/New_York"))
+    """Sunday 5pm PT —the week ahead: calendar, interviews/job actions, deadlines, check-ins."""
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     if now.weekday() != 6:  # Sunday
         return
     import tools, briefings
@@ -653,8 +653,8 @@ async def week_start_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def week_end_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Friday 5pm ET — week in review + a look into next week."""
-    now = datetime.now(ZoneInfo("America/New_York"))
+    """Friday 5pm PT —week in review + a look into next week."""
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     if now.weekday() != 4:  # Friday
         return
     import tools, briefings
@@ -679,7 +679,7 @@ async def week_end_roundup(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def inbox_calendar_sync(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """8am + 6pm ET — scan recent mail for events/bookings, add to calendar
+    """8am + 6pm PT —scan recent mail for events/bookings, add to calendar
     (dedup'd), file follow-ups, and notify only if something was created."""
     import tools, inbox_events
     query = (
@@ -762,7 +762,7 @@ async def interview_watch(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("interview_watch: calendar fetch failed")
         return
 
-    now = datetime.now(ZoneInfo("America/New_York"))
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     for e in events:
         if not is_interview(e.get("summary", ""), e.get("attendees", [])):
             continue
@@ -829,11 +829,11 @@ def main() -> None:
         )
         app.job_queue.run_daily(
             pipeline_daily,
-            time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
+            time=dtime(PIPELINE_DIGEST_HOUR, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
         )
         app.job_queue.run_repeating(interview_watch, interval=3600, first=90)
         # Daily briefings (moved in-house from cowork).
-        ET = ZoneInfo("America/New_York")
+        ET = ZoneInfo("America/Los_Angeles")
         app.job_queue.run_daily(morning_briefing, time=dtime(7, 30, tzinfo=ET))
         app.job_queue.run_daily(midday_check, time=dtime(12, 30, tzinfo=ET))
         app.job_queue.run_daily(eod_wrap, time=dtime(21, 0, tzinfo=ET))  # 9pm: wrap + habit check-in + journal
@@ -845,10 +845,10 @@ def main() -> None:
         app.job_queue.run_once(gmail_healthcheck, when=60)
         app.job_queue.run_daily(
             gmail_healthcheck,
-            time=dtime(HEALTHCHECK_HOUR, 0, tzinfo=ZoneInfo("America/New_York")),
+            time=dtime(HEALTHCHECK_HOUR, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
         )
-        logger.info("Pipeline poll every %s min; daily digest at %02d:00 ET; "
-                    "interview watch hourly; Gmail health check at %02d:00 ET + startup",
+        logger.info("Pipeline poll every %s min; daily digest at %02d:00 PT; "
+                    "interview watch hourly; Gmail health check at %02d:00 PT + startup",
                     PIPELINE_POLL_MINUTES, PIPELINE_DIGEST_HOUR, HEALTHCHECK_HOUR)
     else:
         logger.warning("JobQueue unavailable — install python-telegram-bot[job-queue] "

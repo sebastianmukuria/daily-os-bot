@@ -62,7 +62,7 @@ PROJECT_STATUS_MAP = {
     "Active": "Active", "Paused": "Paused", "Done": "Done", "Idea": "Idea",
 }
 
-ET = "America/New_York"
+ET = "America/Los_Angeles"  # local timezone (Pacific); the ET name is legacy
 
 notion = NotionAsyncClient(auth=os.environ.get("NOTION_TOKEN", ""))
 
@@ -197,7 +197,7 @@ def calendar_event_exists(title: str, date_iso: str) -> bool:
     """True if an event with a matching title already exists on `date_iso`
     (primary calendar) — avoids duplicate inbox-sync creations."""
     service = _get_calendar_service()
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     day = datetime.fromisoformat(date_iso).date()
     start = et.localize(datetime(day.year, day.month, day.day, 0, 0))
     end = start + timedelta(days=1)
@@ -570,7 +570,7 @@ TOOLS = [
         "description": (
             "Create an event on Sebastian's Google Calendar. "
             "For timed events, pass start_datetime (and optionally end_datetime) as ISO 8601 "
-            "in Eastern Time, e.g. '2026-06-09T14:00:00'. If end is omitted, defaults to 1 hour. "
+            "in Pacific Time, e.g. '2026-06-09T14:00:00'. If end is omitted, defaults to 1 hour. "
             "For all-day events, set all_day=true and pass dates as 'YYYY-MM-DD'."
         ),
         "input_schema": {
@@ -917,7 +917,7 @@ async def _get_tasks(filter_energy: str = None, include_done: bool = False) -> d
     result = await aretry(lambda: notion.data_sources.query(**params), label="get_tasks")
 
     energy_order = {"High": 0, "Medium": 1, "Low": 2}
-    today = datetime.now(pytz.timezone(ET)).date()
+    today = datetime.now(pytz.timezone(PT)).date()
     tasks = []
 
     for page in result.get("results", []):
@@ -1297,7 +1297,7 @@ def get_calendar_events_window(hours_back: int = 0, days_ahead: int = 2) -> list
     (primary + shared work calendars), with id + attendee emails — used by the
     interview watcher (recent-past events for debriefs, attendees for detection)."""
     service = _get_calendar_service()
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     now = datetime.now(et)
     time_min = (now - timedelta(hours=hours_back)).isoformat()
     time_max = (now + timedelta(days=days_ahead)).isoformat()
@@ -1330,7 +1330,7 @@ def get_calendar_events_window(hours_back: int = 0, days_ahead: int = 2) -> list
 
 def _get_calendar_events(days_ahead: int = 7) -> dict:
     service = _get_calendar_service()
-    et = pytz.timezone("America/New_York")
+    et = pytz.timezone("America/Los_Angeles")
     now = datetime.now(et)
     time_min = now.isoformat()
     time_max = (now + timedelta(days=days_ahead)).isoformat()
@@ -1362,13 +1362,13 @@ def _get_calendar_events(days_ahead: int = 7) -> dict:
 # --- Briefing helpers ---
 
 async def get_tasks_done_today() -> list:
-    """Names of tasks marked Done whose last edit was today (ET) — the EOD 'wins'.
+    """Names of tasks marked Done whose last edit was today (PT) — the EOD 'wins'.
     Notion has no completion timestamp, so last-edited is the accepted proxy."""
     res = await notion.data_sources.query(
         data_source_id=TASKS_DS_ID,
         filter={"property": "Status", "select": {"equals": STATUS_DONE}},
     )
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     today = datetime.now(et).date()
     out = []
     for page in res.get("results", []):
@@ -1388,7 +1388,7 @@ def get_events_for_day(offset_days: int = 0) -> dict:
     including all-day events. Returns {events: [...], date}. Each event has
     summary, time_str, sort_key (HH:MM), all_day, location, calendar."""
     service = _get_calendar_service()
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     day = (datetime.now(et) + timedelta(days=offset_days)).date()
     start = et.localize(datetime(day.year, day.month, day.day, 0, 0))
     end = start + timedelta(days=1)
@@ -1425,11 +1425,11 @@ def get_events_for_day(offset_days: int = 0) -> dict:
 
 
 def get_events_for_range(start_offset_days: int = 0, num_days: int = 7) -> dict:
-    """All-calendar events over a multi-day window, grouped by local day (ET),
+    """All-calendar events over a multi-day window, grouped by local day (PT),
     including all-day events. Returns {days: [{date, label, events:[...]}], total}.
     Every day in the window is present (events=[] when free)."""
     service = _get_calendar_service()
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     first = (datetime.now(et) + timedelta(days=start_offset_days)).date()
     start = et.localize(datetime(first.year, first.month, first.day, 0, 0))
     end = start + timedelta(days=num_days)
@@ -1469,12 +1469,12 @@ def get_events_for_range(start_offset_days: int = 0, num_days: int = 7) -> dict:
 
 
 async def get_tasks_done_this_week() -> list:
-    """Names of tasks marked Done whose last edit was in the past 7 days (ET)."""
+    """Names of tasks marked Done whose last edit was in the past 7 days (PT)."""
     res = await notion.data_sources.query(
         data_source_id=TASKS_DS_ID,
         filter={"property": "Status", "select": {"equals": STATUS_DONE}},
     )
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     cutoff = datetime.now(et).date() - timedelta(days=7)
     out = []
     for page in res.get("results", []):
@@ -1488,7 +1488,7 @@ async def get_tasks_done_this_week() -> list:
 
 async def get_pipeline_events_since(days: int = 7) -> list:
     """Pipeline transition events in the last `days` days — [{event, to_status, timestamp}]."""
-    et = pytz.timezone(ET)
+    et = pytz.timezone(PT)
     cutoff = (datetime.now(et).date() - timedelta(days=days)).isoformat()
     res = await notion.data_sources.query(
         data_source_id=PIPELINE_EVENTS_DS_ID,
@@ -1520,7 +1520,7 @@ async def _get_habits() -> dict:
         ),
         label="get_habits",
     )
-    today_d = datetime.now(pytz.timezone(ET)).date()
+    today_d = datetime.now(pytz.timezone(PT)).date()
     today = today_d.isoformat()
     weekday = today_d.weekday()  # Mon=0 .. Sun=6
     habits = []
@@ -1561,7 +1561,7 @@ async def _log_habit(habit_name: str) -> dict:
     last = _date(props, "Last Done")
     streak = props.get("Streak", {}).get("number") or 0
 
-    today = datetime.now(pytz.timezone(ET)).date()
+    today = datetime.now(pytz.timezone(PT)).date()
     today_s = today.isoformat()
     if last == today_s:
         return {"success": True, "habit": name, "already_done_today": True, "streak": streak}
@@ -1594,7 +1594,7 @@ async def _add_habit(name: str, cadence: str = "Daily") -> dict:
 
 async def _add_journal_entry(entry: str, title: str = None, tags: list = None) -> dict:
     """Append an entry to the Notion Journal DB (entry text lands as the page body)."""
-    now = datetime.now(pytz.timezone(ET))
+    now = datetime.now(pytz.timezone(PT))
     if not title:
         title = now.strftime("%A, %B %-d")  # e.g. "Saturday, June 27"
     tag_names = tags or ["Daily"]
@@ -1616,7 +1616,7 @@ async def _add_journal_entry(entry: str, title: str = None, tags: list = None) -
 # --- Job Pipeline ---
 
 def _today_et() -> str:
-    return datetime.now(pytz.timezone(ET)).date().isoformat()
+    return datetime.now(pytz.timezone(PT)).date().isoformat()
 
 
 def _filter_by_role(pages: list, role: str = None) -> list:

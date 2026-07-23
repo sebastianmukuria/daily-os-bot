@@ -122,7 +122,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
 | `EVENT_MODEL` | Inbox→calendar extraction model | `claude-haiku-4-5` |
 | `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
-| `HEALTHCHECK_HOUR` | Daily Gmail-auth check (ET); also runs at startup, alerts on failure | `7` |
+| `HEALTHCHECK_HOUR` | Daily Gmail-auth check (PT); also runs at startup, alerts on failure | `7` |
 | `BACKFILL_PACE_SEC` | Backfill classification pacing | `1.4` |
 
 ## Project structure
@@ -144,7 +144,7 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 
 Beyond answering messages, the bot pushes scheduled briefings to the same chat — all running in-process on the JobQueue (no separate agent), so manual and automated paths reuse the exact same domain logic:
 
-- **Morning briefing** (7:30am ET) — today's calendar (across *all* calendars) plus tasks ordered by energy, project check-ins, and stale-task flags.
+- **Morning briefing** (7:30am PT) — today's calendar (across *all* calendars) plus tasks ordered by energy, project check-ins, and stale-task flags.
 - **Midday check** (12:30pm) — done-vs-open count, afternoon events, top remaining tasks.
 - **End-of-day wrap** (6pm) — what got done, what's rolling to tomorrow, tomorrow's calendar.
 - **Week ahead** (Sun 5pm) — the week's calendar by day, interviews/job actions, deadlines, and project check-ins, with a heads-up on the busiest day.
