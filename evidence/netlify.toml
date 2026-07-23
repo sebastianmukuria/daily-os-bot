@@ -1,9 +1,0 @@
-# One-click deploy of the Evidence dashboard to Netlify. Builds from the synthetic
-# CSV source only (no Snowflake/secrets needed), so the public site never exposes
-# real job-search data. Connect the repo in Netlify with base directory `evidence`.
-[build]
-  command = "npm install && npm run sources && npm run build"
-  publish = "build"
-
-[build.environment]
-  NODE_VERSION = "20"

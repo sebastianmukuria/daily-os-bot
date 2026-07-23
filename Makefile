@@ -1,10 +1,10 @@
-# Convenience targets for the Daily OS bot + analytics warehouse.
+# Convenience targets for the Daily OS bot.
 # Override the interpreter if needed:  make test PYTHON=python3.11
 PYTHON ?= python3
 
 .DEFAULT_GOAL := help
 
-.PHONY: help test bot warehouse dbt dashboard report
+.PHONY: help test bot
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -21,16 +21,3 @@ test:  ## Run all unit-test suites
 
 bot:  ## Run the Telegram bot
 	$(PYTHON) bot.py
-
-warehouse: ## Load Notion -> Snowflake, then build the dbt models
-	$(PYTHON) el_notion.py
-	$(MAKE) dbt
-
-dbt:  ## Build dbt models + tests (loads .env for the connection)
-	cd dbt && $(PYTHON) -c "from dotenv import load_dotenv; load_dotenv('../.env'); import subprocess,sys; sys.exit(subprocess.run(['dbt','build','--profiles-dir','.']).returncode)"
-
-dashboard: ## Install + serve the Evidence dashboard locally
-	cd evidence && npm install && npm run sources && npm run dev
-
-report: ## Send the weekly funnel report to Telegram now
-	$(PYTHON) funnel_report.py

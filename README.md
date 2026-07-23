@@ -1,15 +1,12 @@
 # Daily OS Bot
 
 [![Pipeline tests](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/pipeline-tests.yml)
-[![Warehouse refresh](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml/badge.svg)](https://github.com/sebastianmukuria/daily-os-bot/actions/workflows/warehouse.yml)
 
-![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white) ![Claude](https://img.shields.io/badge/Claude-Anthropic-D97757?logo=anthropic&logoColor=white) ![Snowflake](https://img.shields.io/badge/Snowflake-warehouse-29B5E8?logo=snowflake&logoColor=white) ![dbt](https://img.shields.io/badge/dbt-transform-FF694B?logo=dbt&logoColor=white) ![Evidence](https://img.shields.io/badge/Evidence-BI--as--code-A78BFA) ![Notion](https://img.shields.io/badge/Notion-operational%20store-000000?logo=notion&logoColor=white) ![Telegram](https://img.shields.io/badge/Telegram-interface-26A5E4?logo=telegram&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white) ![Claude](https://img.shields.io/badge/Claude-Anthropic-D97757?logo=anthropic&logoColor=white) ![Notion](https://img.shields.io/badge/Notion-operational%20store-000000?logo=notion&logoColor=white) ![Telegram](https://img.shields.io/badge/Telegram-interface-26A5E4?logo=telegram&logoColor=white)
 
 A personal AI assistant that runs your life ops over Telegram — powered by Claude, backed by [Notion](https://notion.so), Google Calendar, and Gmail. Message it in plain English and it manages tasks, projects, habits, reading lists, and calendar events. In the background, it **automatically tracks your job search by reading your inbox**: every application, interview invite, and rejection becomes a structured, queryable pipeline in Notion — no manual status updates.
 
 Built ADHD-first: tasks ordered by energy level, smallest-next-step framing, a few fixed check-in windows instead of random pings, and proactive "want me to time-block this?" prompts.
-
-> **Also a modern data-stack portfolio piece.** Under the hood, all seven Notion databases flow through a **Notion → Snowflake (VARIANT) → dbt → Evidence** ELT pipeline — version-controlled, tested, documented SQL, orchestrated daily in CI. Jump to [Analytics warehouse →](#analytics-warehouse-snowflake--dbt)
 
 ```
 You:  add: call the dentist, low energy
@@ -34,7 +31,6 @@ Bot:  ❌ ExampleCorp — Data Analyst: now Rejected  [Gmail link]
 - [What it does](#what-it-does)
 - [Architecture](#architecture)
 - [The job pipeline tracker](#the-job-pipeline-tracker)
-- [Analytics warehouse (Snowflake + dbt)](#analytics-warehouse-snowflake--dbt)
 - [Setup](#setup)
 - [Project structure](#project-structure)
 - [The proactive layer](#the-proactive-layer)
@@ -48,8 +44,7 @@ Built as a hands-on portfolio piece while pivoting toward data/analytics — the
 |---|---|
 | **Classification + evaluation** | An LLM email classifier gated by a deterministic prefilter, validated against a labeled fixtures set in CI — tuned for recall, since a false negative silently drops a real application |
 | **ETL / data ingestion** | Idempotent Gmail → Notion pipeline: extract (poll + parse), transform (classify + state machine), load (dedupe by thread-id), plus a 90-day historical backfill |
-| **Analytics engineering** | The modern stack end-to-end: Notion → Snowflake (VARIANT) → **dbt** staging/marts with tests + docs, scheduled in CI, surfaced in an **Evidence** dashboard (BI-as-code) — a funnel mart with stage conversion as the headline |
-| **Data modeling** | Per-role application records + a separate `Pipeline Events` transition log, modeled for funnel analytics |
+| **Data modeling** | Per-role application records + a separate `Pipeline Events` transition log for funnel analytics |
 | **Analytics thinking** | Funnel framing (conversion per stage, time-in-stage) and a daily pipeline digest |
 | **Testing & CI** | 40+ assertions across 5 suites, run by GitHub Actions on every relevant PR |
 | **Shipping** | 30+ reviewed PRs; deployed and running in production |
@@ -92,32 +87,6 @@ The most engineering-dense part of the repo — an email-driven ETL pipeline wit
 4. **Idempotent ingestion.** A Gmail label is the processing ledger; Notion writes dedupe by thread-id. Every status change appends to a `Pipeline Events` log for funnel analytics (conversion per stage, time-in-stage).
 5. **90-day backfill.** A one-time script reconstructs historical applications: thread-id union-find groups emails per application, chronological replay through the state machine derives final status, real email timestamps stamp the dates. Dry-run by default, prints a reviewable plan, optionally validates against a known-state file, and resumes from an incremental classification cache (rate-limit-safe).
 
-## Analytics warehouse (Snowflake + dbt)
-
-Notion is the operational store; for analytics the data is modeled in a proper warehouse using the modern **ELT** stack — extract-load raw, then transform in-warehouse with version-controlled, tested SQL.
-
-![Analytics pipeline — Notion's seven databases extract-loaded by el_notion.py into Snowflake RAW as VARIANT JSON, transformed by dbt into staging then marts, surfaced in an Evidence dashboard, all orchestrated daily by GitHub Actions](docs/data-architecture.svg)
-
-- **Extract-load** ([el_notion.py](el_notion.py)) snapshots all seven Notion databases into `RAW.NOTION_PAGES`, landing each page's properties as a Snowflake **VARIANT** — so the loader is schema-agnostic and all typing happens in dbt.
-- **Staging** parses the VARIANT into typed columns (one `stg_` model per database; a `strip_emoji` macro normalizes `🟢 Done` → `Done`).
-- **Marts** model the analytics: `fct_applications`, `fct_pipeline_events`, `fct_tasks`, `fct_habits`, and the headline **`mart_funnel`** — applications reaching each stage (from current status *and* full transition history) with stage-over-stage conversion.
-- **Tested + documented** — `unique` / `not_null` / `accepted_values` / `relationships` tests and column docs across staging and marts, run by `dbt build`.
-- **Orchestrated** by a scheduled [GitHub Action](.github/workflows/warehouse.yml): daily EL → `dbt build`, Snowflake creds in repo secrets.
-
-The dbt project's lineage — seven staging models off the raw VARIANT, fact tables, and the headline funnel mart (`unique` / `not_null` / `accepted_values` / `relationships` tests throughout):
-
-![dbt lineage graph — RAW.NOTION_PAGES feeding seven stg_ models, four of them feeding fct_ tables, with fct_applications and fct_pipeline_events feeding the headline mart_funnel](docs/dbt-lineage.svg)
-
-Auth is **key-pair** (MFA-safe and CI-friendly): generate an RSA key pair, register the public half on your user (`ALTER USER <you> SET RSA_PUBLIC_KEY='...'`), and point `SNOWFLAKE_PRIVATE_KEY_PATH` at the private key. Run it locally: `pip install -r requirements-warehouse.txt`, set the `SNOWFLAKE_*` vars, then `python3 el_notion.py && cd dbt && dbt build --profiles-dir .`
-
-### Dashboard ([Evidence](https://evidence.dev))
-
-The marts feed an Evidence dashboard — BI-as-code (SQL + markdown, version-controlled, deploys as a static site). The committed demo runs on **synthetic data** so it's safe to share publicly; the same project points at the live Snowflake marts locally, so real job-search data never leaves the machine.
-
-![Evidence job-search funnel dashboard — dark mode, synthetic data](docs/evidence-dashboard.png)
-
-Run it: `cd evidence && npm install && npm run sources && npm run dev`.
-
 ## Engineering practices
 
 - **PR-based development** — every change lands through a reviewed pull request (30+ and counting), squash-merged with CI.
@@ -151,7 +120,6 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `GOOGLE_TOKEN_JSON` | OAuth token for cloud deploys | falls back to `token.json` |
 | `CLAUDE_MODEL` | Chat model | `claude-haiku-4-5` |
 | `CLASSIFIER_MODEL` | Email classifier model | `claude-haiku-4-5` |
-| `SCOUT_MODEL` | DC events scout (web search + curation) model | `claude-sonnet-4-6` |
 | `EVENT_MODEL` | Inbox→calendar extraction model | `claude-haiku-4-5` |
 | `PIPELINE_POLL_MINUTES` | Gmail poll cadence | `20` |
 | `HEALTHCHECK_HOUR` | Daily Gmail-auth check (ET); also runs at startup, alerts on failure | `7` |
@@ -169,9 +137,6 @@ The `Procfile` runs the bot as a worker. Set every `.env` variable in the host's
 | `pipeline_interviews.py` | Interview detection, reminder + debrief windows (pure) |
 | `pipeline_backfill.py` | One-time 90-day historical reconstruction (dry-run first) |
 | `seed.py` | Idempotent bulk-seeder for projects/tasks/ideas from YAML |
-| `el_notion.py` | EL job: snapshot all Notion DBs → Snowflake `RAW.NOTION_PAGES` (VARIANT) |
-| `dbt/` | dbt Core project: staging + marts models, tests, docs, macros |
-| `evidence/` | Evidence.dev dashboard (BI-as-code) on synthetic demo data |
 | `test_*.py`, `fixtures/` | Unit tests + labeled email fixtures (run in CI) |
 | `auth_google.py` | One-time Google OAuth (Calendar + Gmail scopes) |
 
@@ -185,9 +150,8 @@ Beyond answering messages, the bot pushes scheduled briefings to the same chat �
 - **Week ahead** (Sun 5pm) — the week's calendar by day, interviews/job actions, deadlines, and project check-ins, with a heads-up on the busiest day.
 - **Week in review** (Fri 5pm) — what got done this week, pipeline movement, loose ends (overdue + stale), and a look into next week.
 - **Inbox → Calendar sync** (8am + 6pm) — scans recent mail for flights / hotels / reservations / tickets, extracts them with an LLM (structured output), dedupes against the calendar, and adds them (notifying only when something's created).
-- **DC events scout** (Thu + Sun, 10am) — web-searches and curates local events for the week ahead.
 
-The reactive briefings are deterministic formatters (unit-tested, no per-run LLM cost); the inbox sync and events scout use Claude where judgment is needed. The bot's reply-context feature closes the loop — reply to any briefing to act on it ("add the 2nd one to my calendar").
+The reactive briefings are deterministic formatters (unit-tested, no per-run LLM cost); the inbox sync uses Claude where judgment is needed. The bot's reply-context feature closes the loop — reply to any briefing to act on it ("add the 2nd one to my calendar").
 
 ## Limitations & roadmap
 
@@ -198,7 +162,7 @@ The reactive briefings are deterministic formatters (unit-tested, no per-run LLM
 
 ## Development workflow
 
-Common tasks are wrapped in a `Makefile` — `make help` lists them (`make test`, `make warehouse`, `make dashboard`, `make report`).
+Common tasks are wrapped in a `Makefile` — `make help` lists them (`make test`, `make bot`).
 
 ```bash
 git checkout -b descriptive-branch-name
