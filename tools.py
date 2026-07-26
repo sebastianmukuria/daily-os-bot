@@ -62,7 +62,8 @@ PROJECT_STATUS_MAP = {
     "Active": "Active", "Paused": "Paused", "Done": "Done", "Idea": "Idea",
 }
 
-ET = "America/Los_Angeles"  # local timezone (Pacific); the ET name is legacy
+PT = "America/Los_Angeles"  # local timezone (Pacific)
+ET = PT  # legacy alias — older call sites still reference ET
 
 notion = NotionAsyncClient(auth=os.environ.get("NOTION_TOKEN", ""))
 
